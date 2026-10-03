@@ -5,6 +5,10 @@ import * as tar from "tar";
 import { describe, expect, it, vi } from "vitest";
 import { createDeferred } from "../../../test/helpers/promise.js";
 import {
+  extractWorkerBundleArchive,
+  DEFAULT_WORKER_BUNDLE_ARCHIVE_LIMITS,
+} from "../../shared/worker-bundle-archive.js";
+import {
   closeOpenClawStateDatabaseAsync,
   closeOpenClawStateDatabaseForTest,
   openOpenClawStateDatabase,
@@ -40,6 +44,7 @@ async function writeFixture(
     "utf8",
   );
   for (const [artifactName, contents] of [
+    ["file-tool-planning.worker.mjs", "export const fileToolPlanning = true;\n"],
     ["github-exec-launcher.mjs", "export const launcher = true;\n"],
     ["image-processor.worker.mjs", "export const imageProcessor = true;\n"],
     ["service-child-group-anchor.mjs", "export const anchor = true;\n"],
@@ -80,21 +85,33 @@ function bundleArtifact(overrides: Partial<WorkerBundleArtifact> = {}): WorkerBu
 }
 
 describe("worker bundle producer", () => {
-  it("stages the workspace rsync receiver at the path used by transfers", async () => {
-    await withTestDir({ prefix: "openclaw-worker-bundle-receiver-" }, async (root) => {
+  it("seals split chunks and verifies them after relocation", async () => {
+    await withTestDir({ prefix: "openclaw-worker-chunks-" }, async (root) => {
       const packageRoot = path.join(root, "package");
-      await writeFixture(packageRoot);
-      const artifact = await createWorkerBundleProducer({
+      await writeFixture(packageRoot, 'export { value } from "./worker-chunk-runtime.mjs";');
+      const chunk = path.join(packageRoot, "dist/worker/worker-chunk-runtime.mjs");
+      await fs.writeFile(chunk, "export const value = 1;");
+      const first = await createWorkerBundleProducer({
         packageRoot,
         cacheDir: path.join(root, "cache"),
       }).prepare();
-      const installPrefix = `.openclaw-worker/${artifact.bundleHash}/`;
-      const receiverPath = workerWorkspaceRsyncReceiverEntryPath(artifact.bundleHash);
-
-      expect(receiverPath.startsWith(installPrefix)).toBe(true);
-      await expect(listTarball(artifact.tarballPath)).resolves.toContain(
-        receiverPath.slice(installPrefix.length),
+      expect(await listTarball(first.tarballPath)).toContain("worker-chunk-runtime.mjs");
+      const destination = path.join(root, "installed");
+      await extractWorkerBundleArchive({
+        tarballPath: first.tarballPath,
+        destination,
+        expectedBundleHash: first.bundleHash,
+        limits: DEFAULT_WORKER_BUNDLE_ARCHIVE_LIMITS,
+      });
+      expect(await fs.readFile(path.join(destination, "worker-chunk-runtime.mjs"), "utf8")).toBe(
+        "export const value = 1;",
       );
+      await fs.writeFile(chunk, "export const value = 2;");
+      const changed = await createWorkerBundleProducer({
+        packageRoot,
+        cacheDir: path.join(root, "cache"),
+      }).prepare();
+      expect(changed.bundleHash).not.toBe(first.bundleHash);
     });
   });
 
@@ -136,7 +153,9 @@ describe("worker bundle producer", () => {
       const compressed = await fs.readFile(first.tarballPath);
       expect(first.tarballSha256).toBe(createHash("sha256").update(compressed).digest("hex"));
       expect(first.tarballBytes).toBe(compressed.byteLength);
-      await expect(listTarball(first.tarballPath)).resolves.toEqual([
+      const entries = await listTarball(first.tarballPath);
+      expect(entries).toEqual([
+        "file-tool-planning.worker.mjs",
         "github-exec-launcher.mjs",
         "image-processor.worker.mjs",
         "service-child-group-anchor.mjs",
@@ -145,10 +164,15 @@ describe("worker bundle producer", () => {
         "worker.mjs",
         "workspace-rsync-receiver.mjs",
       ]);
+      const installPrefix = `.openclaw-worker/${first.bundleHash}/`;
+      const receiverPath = workerWorkspaceRsyncReceiverEntryPath(first.bundleHash);
+      expect(receiverPath.startsWith(installPrefix)).toBe(true);
+      expect(entries).toContain(receiverPath.slice(installPrefix.length));
       const extractRoot = path.join(root, "extract");
       await fs.mkdir(extractRoot);
       await tar.extract({ file: first.tarballPath, cwd: extractRoot });
       for (const [artifactName, expectedContents] of [
+        ["file-tool-planning.worker.mjs", "export const fileToolPlanning = true;\n"],
         ["github-exec-launcher.mjs", "export const launcher = true;\n"],
         ["image-processor.worker.mjs", "export const imageProcessor = true;\n"],
         ["service-child-group-anchor.mjs", "export const anchor = true;\n"],
@@ -185,6 +209,7 @@ describe("worker bundle producer", () => {
 
       let previousHash = first.bundleHash;
       for (const artifactName of [
+        "file-tool-planning.worker.mjs",
         "github-exec-launcher.mjs",
         "image-processor.worker.mjs",
         "service-child-group-anchor.mjs",
@@ -605,6 +630,7 @@ describe("worker bundle producer", () => {
 
       expect(repaired.bundleHash).toBe(first.bundleHash);
       await expect(listTarball(repaired.tarballPath)).resolves.toEqual([
+        "file-tool-planning.worker.mjs",
         "github-exec-launcher.mjs",
         "image-processor.worker.mjs",
         "service-child-group-anchor.mjs",
@@ -618,6 +644,8 @@ describe("worker bundle producer", () => {
 
   it.skipIf(process.platform === "win32")("rejects symlinked deploy artifacts", async () => {
     for (const artifactName of [
+      "worker-chunk-symlink.mjs",
+      "file-tool-planning.worker.mjs",
       "github-exec-launcher.mjs",
       "image-processor.worker.mjs",
       "service-child-group-anchor.mjs",
@@ -630,6 +658,9 @@ describe("worker bundle producer", () => {
         const packageRoot = path.join(root, "package");
         await writeFixture(packageRoot);
         const artifactPath = path.join(packageRoot, "dist", "worker", artifactName);
+        if (artifactName === "worker-chunk-symlink.mjs") {
+          await fs.writeFile(artifactPath, "export {};\n");
+        }
         await fs.rename(artifactPath, `${artifactPath}.target`);
         await fs.symlink(`${artifactName}.target`, artifactPath);
 

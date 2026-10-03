@@ -2,6 +2,7 @@ import fs from "node:fs";
 import nodePath from "node:path";
 import type { DatabaseSync } from "node:sqlite";
 import { expect, it, vi } from "vitest";
+import { applyAgentDatabaseReaderRequest } from "../infra/agent-database-readers.js";
 import { executeSqliteQueryTakeFirstSync, getNodeSqliteKysely } from "../infra/kysely-sync.js";
 import * as nodeSqlite from "../infra/node-sqlite.js";
 import { requireNodeSqlite } from "../infra/node-sqlite.js";
@@ -12,10 +13,7 @@ import {
   closeOpenClawAgentDatabaseByPath,
   closeOpenClawAgentDatabaseByPathAsync,
 } from "./openclaw-agent-db-lifecycle.js";
-import {
-  closeOpenClawAgentDatabaseReadOnlyCandidates,
-  OpenClawAgentDatabaseReadOnlyScope,
-} from "./openclaw-agent-db-readonly-scope.js";
+import { OpenClawAgentDatabaseReadOnlyScope } from "./openclaw-agent-db-readonly-scope.js";
 import {
   retainOpenClawAgentDatabaseReadOnly,
   withOpenClawAgentDatabaseReadOnly,
@@ -136,29 +134,32 @@ it.each([
     sql: "UPDATE schema_meta SET role = 'state' WHERE meta_key = 'primary'",
     error: "has schema role state",
   },
-])("revalidates retained read admission after a committed change: $sql", async ({ sql, error }) => {
-  await withOpenClawTestState({ scenario: "minimal" }, async (state) => {
-    const options = { agentId: "main", env: state.env };
-    const { path } = openOpenClawAgentDatabase(options);
-    await closeOpenClawAgentDatabaseByPathAsync(path);
-    const target = { agentId: "main", path };
-    const scope = new OpenClawAgentDatabaseReadOnlyScope();
-    const read = () =>
-      scope.run(target, () => withOpenClawAgentDatabaseReadOnly(() => "admitted", options));
-    try {
-      expect(read()).toEqual({ found: true, value: "admitted" });
-      const writer = new (requireNodeSqlite().DatabaseSync)(path);
+])(
+  "revalidates retained read admission on the next read after a commit: $sql",
+  async ({ sql, error }) => {
+    await withOpenClawTestState({ scenario: "minimal" }, async (state) => {
+      const options = { agentId: "main", env: state.env };
+      const { path } = openOpenClawAgentDatabase(options);
+      await closeOpenClawAgentDatabaseByPathAsync(path);
+      const target = { agentId: "main", path };
+      const scope = new OpenClawAgentDatabaseReadOnlyScope();
+      const read = () =>
+        scope.run(target, () => withOpenClawAgentDatabaseReadOnly(() => "admitted", options));
       try {
-        writer.exec(sql);
+        expect(read()).toEqual({ found: true, value: "admitted" });
+        const writer = new (requireNodeSqlite().DatabaseSync)(path);
+        try {
+          writer.exec(sql);
+        } finally {
+          writer.close();
+        }
+        expect(read).toThrow(error);
       } finally {
-        writer.close();
+        scope.close();
       }
-      expect(read).toThrow(error);
-    } finally {
-      scope.close();
-    }
-  });
-});
+    });
+  },
+);
 
 it("reuses ordinary readers until idle expiry and reopens after lifecycle invalidation", async () => {
   await withOpenClawTestState({ scenario: "minimal" }, async (state) => {
@@ -379,8 +380,10 @@ it("closes generic and explicit candidate-family readers without releasing unrel
     const explicit = scope.run(options(sibling), () => read(sibling));
     const retained = read(unrelated);
     const candidates = [{ path: family, scope: "sibling-family" as const }];
+    const closeReaders = () =>
+      applyAgentDatabaseReaderRequest({ kind: "close", candidates, deleted: false });
     try {
-      closeOpenClawAgentDatabaseReadOnlyCandidates(candidates);
+      await closeReaders();
       expect(selected.isOpen).toBe(false);
       expect(explicit.isOpen).toBe(false);
       expect(retained.isOpen).toBe(true);
@@ -388,16 +391,21 @@ it("closes generic and explicit candidate-family readers without releasing unrel
 
       const reopened = scope.run(options(sibling), () => read(sibling));
       const failure = new Error("native reader close failed");
-      const close = vi.spyOn(reopened, "close").mockImplementationOnce(() => {
+      const close = vi.spyOn(reopened, "close").mockImplementation(() => {
         throw failure;
       });
+      const causes = (error: unknown): unknown[] =>
+        error instanceof AggregateError ? error.errors.flatMap(causes) : [error];
       try {
-        expect(() => closeOpenClawAgentDatabaseReadOnlyCandidates(candidates)).toThrow(failure);
+        await expect(closeReaders()).rejects.toSatisfy(
+          (error: unknown) => error instanceof AggregateError && causes(error).includes(failure),
+        );
         expect(reopened.isOpen).toBe(true);
         expect(() => scope.run(options(sibling), () => read(sibling))).toThrow(
           "native cleanup is pending",
         );
-        closeOpenClawAgentDatabaseReadOnlyCandidates(candidates);
+        close.mockRestore();
+        await closeReaders();
         expect(reopened.isOpen).toBe(false);
         expect(retained.isOpen).toBe(true);
       } finally {

@@ -1,7 +1,10 @@
+import path from "node:path";
 import { describe, expect, it } from "vitest";
 import { extractMessagingToolSourceReplyPayload } from "../../agents/embedded-agent-messaging-extraction.js";
 import type { RunEmbeddedAgentInternalParams } from "../../agents/embedded-agent-runner/run/internal-params.js";
 import { createOpenClawTools } from "../../agents/openclaw-tools.js";
+import { replaceSessionEntry } from "../../config/sessions/session-accessor.sqlite-entry.js";
+import { withSessionTranscriptWriteAssertion } from "../../config/sessions/transcript-write-context.js";
 import {
   createFollowupRun,
   createMinimalRunAgentTurnParams,
@@ -107,4 +110,84 @@ describe.each(["cli", "embedded"] as const)("heartbeat %s source delivery", (run
       }
     },
   );
+  it("retains revoked source authority at runtime admission", async () => {
+    const followupRun = createFollowupRun();
+    followupRun.run.sessionKey = "agent:main:dashboard:source-authority";
+    const isCli = runtime === "cli";
+    const provider = isCli ? "claude-cli" : "anthropic";
+    const model = isCli ? "sonnet-4.6" : "claude";
+    followupRun.run.provider = provider;
+    followupRun.run.model = model;
+    state.isCliProviderMock.mockReturnValue(isCli);
+    await useProductionEmbeddedRunExecutionParamsForTest();
+    let current = true;
+    state.runWithModelFallbackMock.mockImplementationOnce(async (params: FallbackRunnerParams) => {
+      return {
+        result: await params.run(provider, model, initialFallbackAttemptOptions(params)),
+        provider,
+        model,
+        attempts: [],
+      };
+    });
+    const runAgent = isCli ? state.runCliAgentMock : state.runEmbeddedAgentMock;
+    let sourceFailure: unknown;
+    let admissionFailure: unknown;
+    runAgent.mockImplementationOnce(async (params: RunEmbeddedAgentInternalParams) => {
+      current = false;
+      try {
+        params.preparedRunAdmission!.assertSourceCurrent();
+      } catch (error) {
+        sourceFailure = error;
+      }
+      // CLI is already admitted by its candidate owner; embedded admission is
+      // deferred to the runner. Both must retain the original live authority.
+      if (!isCli) {
+        try {
+          await params.preparedRunAdmission!.admit(runtime, "source-test-runtime");
+        } catch (error) {
+          admissionFailure = error;
+        }
+      }
+      return { payloads: [], meta: {} };
+    });
+    const execute = await getExecuteAgentTurnForTest();
+    const params = createMinimalRunAgentTurnParams({
+      followupRun,
+      opts: { isHeartbeat: true },
+    });
+    params.isHeartbeat = true;
+    params.storePath = path.join(followupRun.run.workspaceDir, "sessions.json");
+    params.sessionKey = followupRun.run.sessionKey;
+    const entry = await replaceSessionEntry(
+      {
+        agentId: followupRun.run.agentId,
+        sessionKey: params.sessionKey,
+        storePath: params.storePath,
+      },
+      { sessionId: followupRun.run.sessionId, updatedAt: 1 },
+    );
+    expect(entry).not.toBeNull();
+    params.getActiveSessionEntry = () => entry ?? undefined;
+    await withSessionTranscriptWriteAssertion(
+      {
+        agentId: followupRun.run.agentId,
+        sessionId: followupRun.run.sessionId,
+        sessionKey: params.sessionKey,
+        storePath: params.storePath,
+      },
+      () => {
+        if (!current) {
+          throw new Error("source revoked");
+        }
+      },
+      () => execute(params),
+    );
+    expect(runAgent).toHaveBeenCalledOnce();
+    expect(sourceFailure).toBeInstanceOf(Error);
+    expect(String(sourceFailure)).toContain("source revoked");
+    if (!isCli) {
+      expect(admissionFailure).toBeInstanceOf(Error);
+      expect(String(admissionFailure)).toContain("source revoked");
+    }
+  });
 });

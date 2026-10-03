@@ -8,6 +8,7 @@ import {
 } from "../auto-reply/reply/reply-operation-run-state.js";
 import { withReplySystemEventContext } from "../auto-reply/reply/system-event-session-key.js";
 import type { MsgContext } from "../auto-reply/templating.js";
+import { withSessionTranscriptWriteAssertion } from "../config/sessions/transcript-write-context.js";
 import { parseSessionDeliveryRoute } from "../routing/session-key.js";
 import { INTERNAL_MESSAGE_CHANNEL } from "../utils/message-channel.js";
 import { formatErrorMessage } from "./errors.js";
@@ -60,6 +61,10 @@ export async function runHeartbeatOnce(opts: HeartbeatRunOptions): Promise<Heart
     (!sourceRoute || sourceRoute.channel === INTERNAL_MESSAGE_CHANNEL)
       ? prepared.internalProjection
       : undefined;
+  const sourceScope = internalSource
+    ? { agentId, storePath: prepared.storePath, ...internalSource }
+    : undefined;
+  let releaseSource: (() => void) | undefined;
   const policy = createHeartbeatDispatch(opts, wake, prepared);
   const state: ReplyOperationRunState = { heartbeat: policy };
   const signal = getHeartbeatWakeAbortSignal();
@@ -81,6 +86,29 @@ export async function runHeartbeatOnce(opts: HeartbeatRunOptions): Promise<Heart
         })
       : undefined;
   try {
+    let assertSourceCurrent: (() => void) | undefined;
+    if (sourceScope) {
+      const { prepareSessionMutationFacts } =
+        await import("../gateway/session-sharing-preparation.js");
+      const facts = await prepareSessionMutationFacts({
+        cfg,
+        agentId,
+        sessionKey: sourceScope.sessionKey,
+      });
+      releaseSource = facts.release;
+      assertSourceCurrent = () => {
+        const { target } = facts.readCurrent(cfg);
+        if (
+          target.storePath !== sourceScope.storePath ||
+          target.canonicalKey !== sourceScope.sessionKey ||
+          target.entry.sessionId !== sourceScope.sessionId ||
+          target.entry.lifecycleRevision !== sourceScope.lifecycleRevision
+        ) {
+          throw new Error("heartbeat source generation changed before reply admission");
+        }
+      };
+      assertSourceCurrent();
+    }
     const { dispatchInboundMessageWithRoutedChannelDispatcher } =
       await import("../auto-reply/dispatch.js");
     await typing?.onReplyStart();
@@ -126,72 +154,80 @@ export async function runHeartbeatOnce(opts: HeartbeatRunOptions): Promise<Heart
       SessionKey: runSessionKey,
       AgentId: agentId,
     } satisfies MsgContext;
-    await dispatchInboundMessageWithRoutedChannelDispatcher({
-      cfg,
-      ctx: heartbeatContext,
-      replyResolver: opts.deps?.getReplyFromConfig,
-      suppressOutboundHooks: true,
-      replyOptions: withReplySystemEventContext<InternalGetReplyOptions>(
-        {
-          isHeartbeat: true,
-          requireExplicitMessageTarget: !internalSource,
-          // Isolated heartbeats mint a fresh session ID per run, so nothing later
-          // reuses this run's bundle MCP runtime; retire it at settlement.
-          ...(prepared.run.kind === "isolated" ? { cleanupBundleMcpOnRunEnd: true } : {}),
-          replyConversation: prepareReplyConversation({
-            ctx: heartbeatContext,
-            sessionEntry: suppressOriginatingContext ? undefined : prepared.conversationEntry,
+    const dispatch = () =>
+      dispatchInboundMessageWithRoutedChannelDispatcher({
+        cfg,
+        ctx: heartbeatContext,
+        replyResolver: opts.deps?.getReplyFromConfig,
+        suppressOutboundHooks: true,
+        replyOptions: withReplySystemEventContext<InternalGetReplyOptions>(
+          {
             isHeartbeat: true,
-          }),
-          [REPLY_OPERATION_RUN_STATE]: state,
-          heartbeatModelOverride: heartbeat?.model?.trim(),
-          ...(prepared.usesHeartbeatResponseTool
-            ? {
-                enableHeartbeatTool: true,
-                forceHeartbeatTool: true,
-                sourceReplyDeliveryMode: "message_tool_only",
+            useHeartbeatFailureCopy: prepared.useHeartbeatFailureCopy,
+            requireExplicitMessageTarget: !internalSource,
+            // Isolated heartbeats mint a fresh session ID per run, so nothing later
+            // reuses this run's bundle MCP runtime; retire it at settlement.
+            ...(prepared.run.kind === "isolated" ? { cleanupBundleMcpOnRunEnd: true } : {}),
+            replyConversation: prepareReplyConversation({
+              ctx: heartbeatContext,
+              sessionEntry: suppressOriginatingContext ? undefined : prepared.conversationEntry,
+              isHeartbeat: true,
+            }),
+            [REPLY_OPERATION_RUN_STATE]: state,
+            heartbeatModelOverride: heartbeat?.model?.trim(),
+            ...(prepared.usesHeartbeatResponseTool
+              ? {
+                  enableHeartbeatTool: true,
+                  forceHeartbeatTool: true,
+                  sourceReplyDeliveryMode: "message_tool_only",
+                }
+              : {}),
+            abortSignal: signal,
+            // Admitted task continuations retain their ordinary agent budget even after wake coalescing.
+            timeoutOverrideSeconds: prepared.hasTaskContinuation
+              ? undefined
+              : resolveHeartbeatTimeoutOverrideSeconds(cfg, heartbeat),
+            bootstrapContextMode: heartbeat?.lightContext === true ? "lightweight" : undefined,
+            disableBlockStreaming: true,
+            suppressToolProgressMessages: true,
+            suppressDefaultToolProgressMessages: true,
+            onModelSelected: prepared.replyPrefix.onModelSelected,
+            onSessionPrepared: (binding) => {
+              // Capture initialization's exact identity once; later replacements cannot inherit delivery.
+              if (
+                !policy.prepared.policySessionEntry &&
+                !prepared.outboundPolicySessionKey &&
+                binding.sessionKey === prepared.sessionKey &&
+                binding.storePath === prepared.storePath &&
+                binding.lifecycleRevision !== undefined
+              ) {
+                policy.prepared = {
+                  ...prepared,
+                  policySessionEntry: {
+                    sessionId: binding.sessionId,
+                    lifecycleRevision: binding.lifecycleRevision,
+                    updatedAt: startedAt,
+                  },
+                };
               }
-            : {}),
-          abortSignal: signal,
-          // Admitted task continuations retain their ordinary agent budget even after wake coalescing.
-          timeoutOverrideSeconds: prepared.hasTaskContinuation
-            ? undefined
-            : resolveHeartbeatTimeoutOverrideSeconds(cfg, heartbeat),
-          bootstrapContextMode: heartbeat?.lightContext === true ? "lightweight" : undefined,
-          disableBlockStreaming: true,
-          suppressToolProgressMessages: true,
-          suppressDefaultToolProgressMessages: true,
-          onModelSelected: prepared.replyPrefix.onModelSelected,
-          onSessionPrepared: (binding) => {
-            // Capture initialization's exact identity once; later replacements cannot inherit delivery.
-            if (
-              !policy.prepared.policySessionEntry &&
-              !prepared.outboundPolicySessionKey &&
-              binding.sessionKey === prepared.sessionKey &&
-              binding.storePath === prepared.storePath &&
-              binding.lifecycleRevision !== undefined
-            ) {
-              policy.prepared = {
-                ...prepared,
-                policySessionEntry: {
-                  sessionId: binding.sessionId,
-                  lifecycleRevision: binding.lifecycleRevision,
-                  updatedAt: startedAt,
-                },
-              };
-            }
+            },
           },
+          {
+            sessionKey: prepared.inspectsRunQueue ? prepared.sessionKey : runSessionKey,
+            events: prepared.inspectsRunQueue ? prepared.genericEvents : [],
+            deferredEventIds: prepared.deferredGenericEvents
+              .map((event) => event.id)
+              .filter((id): id is string => typeof id === "string"),
+          },
+        ),
+        dispatcherOptions: {
+          deliver: (payload) =>
+            deliverHeartbeatDispatch(policy, payload, state.agentTurnOwner?.abortSignal ?? signal),
         },
-        {
-          sessionKey: prepared.inspectsRunQueue ? prepared.sessionKey : runSessionKey,
-          events: prepared.inspectsRunQueue ? prepared.genericEvents : [],
-        },
-      ),
-      dispatcherOptions: {
-        deliver: (payload) =>
-          deliverHeartbeatDispatch(policy, payload, state.agentTurnOwner?.abortSignal ?? signal),
-      },
-    });
+      });
+    await (sourceScope && assertSourceCurrent
+      ? withSessionTranscriptWriteAssertion(sourceScope, assertSourceCurrent, dispatch)
+      : dispatch());
     if (policy.result) {
       return policy.result;
     }
@@ -220,6 +256,7 @@ export async function runHeartbeatOnce(opts: HeartbeatRunOptions): Promise<Heart
     heartbeatLog.error(`heartbeat failed: ${reason}`, { error: reason });
     return { status: "failed", reason };
   } finally {
+    releaseSource?.();
     typing?.onCleanup?.();
   }
 }

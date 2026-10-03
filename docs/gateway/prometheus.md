@@ -161,7 +161,9 @@ For traces, logs, OTLP push, and OpenTelemetry GenAI semantic attributes, see [O
 | `openclaw_worker_count`                              | gauge     | none                                                                                      |
 | `openclaw_worker_heap_sampled_count`                 | gauge     | none                                                                                      |
 | `openclaw_worker_heap_used_bytes`                    | gauge     | `script`                                                                                  |
-| `openclaw_child_process_spawn_total`                 | counter   | `family`                                                                                  |
+| `openclaw_worker_started_total`                      | counter   | `script`                                                                                  |
+| `openclaw_worker_retired_total`                      | counter   | `script`, `reason`                                                                        |
+| `openclaw_child_process_spawn_total`                 | counter   | `family`, `operation`                                                                     |
 | `openclaw_memory_rss_bytes`                          | histogram | none                                                                                      |
 | `openclaw_memory_pressure_total`                     | counter   | `level`, `reason`                                                                         |
 | `openclaw_telemetry_exporter_total`                  | counter   | `exporter`, `reason`, `signal`, `status`                                                  |
@@ -300,32 +302,69 @@ These values do not account for every native allocation or allocator arena.
 
 Worker totals sum completed native heap samples from live Workers created after
 the resource registry starts. On Node, this includes direct plugin Workers;
-nested Workers and V8's internal threads are outside the parent registry.
+nested Workers, native-library thread pools (such as Discord DAVE's Rayon pool),
+and V8's internal threads are outside the parent registry.
 The 30-second diagnostics heartbeat starts a nonblocking refresh, retaining at
 most one outstanding request per Worker. Samples expire after 60 seconds and
 are removed when the Worker exits. Compare `openclaw_worker_heap_sampled_count`
 with `openclaw_worker_count`: startup, unavailable APIs, and stalled Workers can
 produce partial totals. No heap snapshot or extra sampling timer is created.
 `openclaw_worker_heap_used_bytes{script="..."}` sums fresh heap samples for each
-Worker script. Labels use a fixed allowlist of runtime-entrypoint and pooled Worker basenames, normalized to
-`.js` in source and packaged runs; unknown, eval, and directly created Workers
+Worker script. Labels use a fixed allowlist of runtime-entrypoint, pooled, and bundled plugin Worker basenames, normalized to
+`.js` in source and packaged runs; unknown, eval, and unwrapped third-party Workers
 use `other`. Full paths and eval source are never recorded. A script's series
 disappears when it has no live, fresh samples. Memory-pressure logs include the
 same byte counts and Worker coverage counts, plus `workerHeaps`: the five largest
 individual fresh Worker heaps as `{script, heapUsed, heapTotal}` (bytes), using the same
 bounded script names.
 
-`openclaw_child_process_spawn_total{family="..."}` counts successful launches
+`openclaw_worker_started_total{script="..."}` and
+`openclaw_worker_retired_total{script="...",reason="..."}` expose cumulative
+starts and confirmed native exits through the same heartbeat. Retirement reasons
+are `idle_timeout`, `memory_pressure`, `closed`, `rotation`, `cancelled`,
+`failure`, or `exit` when an owner did not specify a reason. A retirement request
+does not count until the Worker exits; failed termination and retries do not
+double-count. Counters survive exporter restarts and reset with the process.
+Use `60 * rate(openclaw_worker_started_total[5m])` for starts per minute by
+script. These counts share the registry coverage limits above; they do not
+measure resident memory released by an exit.
+
+`openclaw gateway call diagnostics.lanes --json` also reports `workerCount`,
+`workerPoolCount`, and `workerPools`. Each pool entry contains a process-local
+`poolId`, an allowlisted `script`, and its live `workerCount`. The response lists
+the 100 largest live pools; `workerPoolCount` includes all live pools. Counts
+include pending retirements until native exit and disappear when a pool has no
+live Workers. Direct Workers contribute to `workerCount` without a pool entry.
+These are JavaScript Worker counts, not an operating-system thread census.
+
+`openclaw_child_process_spawn_total{family="...",operation="..."}` counts successful launches
 through OpenClaw's shared spawn and exec owners, including brokered launches.
 Diagnostics must be enabled. The existing heartbeat publishes accumulated
 counts after at least one minute, with debug logs reporting counts and rates
 using the actual elapsed interval. Failed launches, direct calls bypassing
 these owners, and descendants started by children are excluded. Families are
 a fixed executable-name allowlist; unrecognized commands become `other`.
-Arguments and paths are never recorded. For launches per minute, use
-`60 * rate(openclaw_child_process_spawn_total[5m])`; this window accommodates
+Git launches carry a bounded owner/operation label: `repository.identities`,
+`repository.branches`, `checkout.revision`, `checkout.context`, `checkout.diff`,
+`checkout.baseline`, `pull-request.branch-facts`, `worktree.snapshot`,
+`worktree.cleanup`, `worktree.provision`, `worktree.inspect`,
+`worktree.recovery`, `workspace.inventory`, `workspace.manifest`, `project.clone`,
+`workspace.result-cleanup`, `session.materialize`, or `publication`. Worker operations retain their admitted
+owner when the parent launches Git, including parallel batches and retries.
+Unattributed Git launches use `unknown`; other executable families use `none`.
+Arguments, repository paths, session IDs, and free-text caller names are never recorded.
+For launches per minute grouped by Git owner, use
+`60 * sum by (operation) (rate(openclaw_child_process_spawn_total{family="git"}[5m]))`.
+To retain the previous per-family view, use
+`60 * sum by (family) (rate(openclaw_child_process_spawn_total[5m]))`; this window accommodates
 the minute-batched publication. Neither accounting path changes pressure
 thresholds or user-tool execution.
+
+`workspace.result-cleanup` identifies the post-start worker-placement orphan-ref
+inventory. It examines at most eight checkout roots per full recovery sweep,
+serially, and yields to active Gateway requests. The existing recovery scheduler
+continues unfinished work; completed roots remain recorded only for that startup
+cleanup pass. Normal result settlement still removes its own refs immediately.
 
 ### Garbage collection duration
 
