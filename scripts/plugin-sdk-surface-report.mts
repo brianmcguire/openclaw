@@ -245,7 +245,8 @@ export function readPluginSdkSurfaceBudgets(env: NodeJS.ProcessEnv = process.env
       // +2: approved readTranscriptStatsAsync and PreparedAgentRunStart replacements;
       // the released synchronous stats reader and onAgentRunStart callback remain compatible.
       // +1: deprecated createSessionHeaderLink retained from shipped 2026.10.1.
-      3699,
+      // -9: retired heartbeat reply and harness exports.
+      3690,
       env,
     ),
     publicFunctionExports: readPluginSdkSurfaceBudgetEnv(
@@ -272,7 +273,8 @@ export function readPluginSdkSurfaceBudgets(env: NodeJS.ProcessEnv = process.env
       // +1: the same bounded stale-read cache factory on collection-runtime.
       // +1: readTranscriptStatsAsync replaces the retained synchronous stats reader.
       // +1: the same deprecated createSessionHeaderLink.
-      2159,
+      // -4: retired heartbeat reply and harness functions.
+      2155,
       env,
     ),
     publicDeprecatedExports: readPluginSdkSurfaceBudgetEnv(
