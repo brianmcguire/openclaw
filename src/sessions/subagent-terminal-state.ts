@@ -1,4 +1,5 @@
 import type { AcpSessionControlConstraint } from "../acp/runtime/session-meta-control.types.js";
+import { captureRuntimeConfigAsyncReader } from "../config/io.runtime.js";
 import type { SessionEntryCurrentCheck } from "../config/sessions/session-entry-current.types.js";
 import {
   captureSessionWatcherStorePaths,
@@ -64,9 +65,11 @@ export async function recordSubagentTerminalState(
   assertCurrent: () => void,
   acpControl?: AcpSessionControlConstraint,
 ): Promise<void> {
-  const watcherStorePaths =
-    params.watcherStorePaths ??
-    (await prepareSessionWatcherStorePaths([params.requesterSessionKey])).paths;
+  let watcherStorePaths = params.watcherStorePaths;
+  if (!watcherStorePaths) {
+    await captureRuntimeConfigAsyncReader()();
+    watcherStorePaths = (await prepareSessionWatcherStorePaths([params.requesterSessionKey])).paths;
+  }
   const prepared = prepareSubagentTerminalState({ ...params, watcherStorePaths });
   await recordSessionStateEventAsync(prepared.input.event, {
     now: prepared.input.now,
