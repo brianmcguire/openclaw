@@ -49,10 +49,10 @@ function LocalToggleRow(props: {
 }) {
   return (
     <SettingsToggleRow
-      title={t(props.title)}
+      title={props.title}
       description={
         <>
-          {t(props.hint)}
+          {props.hint}
           <br />
           <SettingsDefaultDescription
             value={t(UI_APPEARANCE_DEFAULTS[props.setting] ? "common.enabled" : "common.disabled")}
@@ -298,16 +298,16 @@ export function ChatPreferencesSection(props: ConfigProps) {
             <LocalToggleRow
               config={props}
               setting="chatShowTaskProgress"
-              title="configView.chatPrefs.showTaskProgress"
-              hint="configView.chatPrefs.showTaskProgressHint"
+              title={t("configView.chatPrefs.showTaskProgress")}
+              hint={t("configView.chatPrefs.showTaskProgressHint")}
             />
           }
           {
             <LocalToggleRow
               config={props}
               setting="chatCollapseTaskProgress"
-              title="configView.chatPrefs.collapseTaskProgress"
-              hint="configView.chatPrefs.collapseTaskProgressHint"
+              title={t("configView.chatPrefs.collapseTaskProgress")}
+              hint={t("configView.chatPrefs.collapseTaskProgressHint")}
               disabled={!props.chatShowTaskProgress}
             />
           }
@@ -440,8 +440,8 @@ export function ChatPreferencesSection(props: ConfigProps) {
             <LocalToggleRow
               config={props}
               setting="composerHoldToRecord"
-              title="chat.composer.holdToRecordSetting"
-              hint="chat.composer.holdToRecordSettingDescription"
+              title={t("chat.composer.holdToRecordSetting")}
+              hint={t("chat.composer.holdToRecordSettingDescription")}
             />
           }
         </div>
@@ -465,16 +465,16 @@ export function SidebarPreferencesSection(props: ConfigProps) {
             <LocalToggleRow
               config={props}
               setting="sidebarLiveActivity"
-              title="configView.sidebarPrefs.liveActivity"
-              hint="configView.sidebarPrefs.liveActivityHint"
+              title={t("configView.sidebarPrefs.liveActivity")}
+              hint={t("configView.sidebarPrefs.liveActivityHint")}
             />
           }
           {
             <LocalToggleRow
               config={props}
               setting="sessionDeleteConfirm"
-              title="configView.sidebarPrefs.deleteConfirm"
-              hint="configView.sidebarPrefs.deleteConfirmHint"
+              title={t("configView.sidebarPrefs.deleteConfirm")}
+              hint={t("configView.sidebarPrefs.deleteConfirmHint")}
             />
           }
         </div>
