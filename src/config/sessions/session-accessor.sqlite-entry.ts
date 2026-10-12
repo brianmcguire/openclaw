@@ -521,11 +521,17 @@ async function patchSqliteSessionEntrySnapshot(
           await source.release?.();
           throw new Error("Transaction-local entry authority differs from its writer");
         }
-        // Other stores and opaque SDK callbacks keep their live authority check at
-        // the existing commit grant; the target's write still belongs to its worker.
-        return locality === "same-store"
-          ? workerPatch(source)
-          : workerPatch({ ...source, checks: [] }, sourceAssertion);
+        if (locality === "same-store") {
+          return workerPatch(source);
+        }
+        await source.release?.();
+        // Cross-store effects need their source receipt in scope at the commit grant.
+        return runWithSessionSourceScope(
+          sourceAssertion,
+          () =>
+            workerPatch({ assertCurrent: () => sourceAssertion?.(), checks: [] }, sourceAssertion),
+          { checkAfter: false },
+        );
       }
       const patchNative = async () =>
         withDatabase(async () => {
