@@ -31,6 +31,7 @@ import { resolveSessionAgentId } from "../agent-scope.js";
 import { runWithAgentToolSourceExecutionScope } from "../agent-tool-source-execution-guard.js";
 import * as embeddedMessageDelivery from "../embedded-agent-message-delivery.js";
 import { createSandboxBridgeReadFile } from "../sandbox-media-paths.js";
+import { captureAgentWorkspaceReadiness } from "../workspace-readiness.js";
 import { type AnyAgentTool, jsonResult, readToolStringParam } from "./common.js";
 import { captureGatewayToolCallerAssertion } from "./gateway-caller-context.js";
 import {
@@ -106,6 +107,9 @@ function* createMessageToolSteps(
   AnyAgentTool,
   Awaited<ReturnType<typeof resolveMessageToolDiscoveryAsync>>
 > {
+  const workspaceReadiness = captureAgentWorkspaceReadiness(
+    options?.runSessionKey ?? options?.agentSessionKey,
+  );
   const loadConfigForTool = options?.getRuntimeConfig ?? getRuntimeConfig;
   const getScopedSecretTargetsForTool =
     options?.getScopedChannelsCommandSecretTargets ?? getScopedChannelsCommandSecretTargets;
@@ -133,10 +137,7 @@ function* createMessageToolSteps(
   const resolvedAgentId =
     options?.agentId ??
     (options?.agentSessionKey
-      ? resolveSessionAgentId({
-          sessionKey: options.agentSessionKey,
-          config: options?.config,
-        })
+      ? resolveSessionAgentId({ sessionKey: options.agentSessionKey, config: options.config })
       : undefined);
   const pollEchoSessionKey =
     rawPollEchoSessionKey && resolvedAgentId && sourceReplySinkDeliveryMode === "message_tool_only"
@@ -191,10 +192,7 @@ function* createMessageToolSteps(
   const actions = discovered?.actions;
   const baseSchema = options?.sourceReplyOnly
     ? SOURCE_REPLY_ONLY_MESSAGE_SCHEMA
-    : discovered
-      ? discovered.schema
-      : MessageToolSchema;
-  const schema = addSourceReplyFinalControl(baseSchema);
+    : (discovered?.schema ?? MessageToolSchema);
   const description = options?.sourceReplyOnly
     ? "Send a message to the current source conversation. Supports actions: send."
     : buildMessageToolDescription(actions) +
@@ -222,7 +220,7 @@ function* createMessageToolSteps(
     name: "message",
     displaySummary: "Send and manage messages across configured channels.",
     description,
-    parameters: schema,
+    parameters: addSourceReplyFinalControl(baseSchema),
     prepareBeforeToolCallParams: explicitTargetGuard?.prepareBeforeToolCallParams,
     finalizeBeforeToolCallParams: explicitTargetGuard?.finalizeBeforeToolCallParams,
     execute: async (toolCallId, args, signal) => {
@@ -588,6 +586,7 @@ function* createMessageToolSteps(
                   senderIsOwner: options?.senderIsOwner,
                   conversationReadOrigin: options?.conversationReadOrigin,
                   workspaceDir: options?.workspaceDir,
+                  workspaceReadiness,
                   broadcastAccountPlan,
                   gateway,
                   toolContext,

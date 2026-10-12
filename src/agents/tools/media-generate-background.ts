@@ -13,6 +13,7 @@ import type { AuthProfileStore } from "../auth-profiles/types.js";
 import { recordRecentMediaGenerationTaskStartForSession } from "../media-generation-task-status-shared.js";
 import type { PreparedModelRuntimeSnapshot } from "../prepared-model-runtime.types.js";
 import type { ToolFsPolicy } from "../tool-fs-policy.js";
+import { captureAgentWorkspaceReadiness } from "../workspace-readiness.js";
 import { ToolInputError, readToolStringParam } from "./common.js";
 import {
   captureMediaGenerationAdmission,
@@ -104,6 +105,7 @@ export function resolveMediaGenerateToolContext<K extends keyof typeof GENERATIO
   return {
     cfg,
     preparedProviders,
+    workspaceReadiness: captureAgentWorkspaceReadiness(options?.agentSessionKey),
     taskOptions: () => ({
       sessionKey: options?.agentSessionKey,
       requesterAgentId: options?.requesterAgentId,

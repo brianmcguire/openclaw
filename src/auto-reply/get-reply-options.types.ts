@@ -55,6 +55,14 @@ export type PreparedReplyTranscriptStart = {
   maxSeq: number | null;
 };
 
+/** Run-start notification after the runtime has prepared its transcript boundary. */
+export type PreparedAgentRunStart = {
+  runId: string;
+  executionIdentityToken?: ExecutionIdentityAdmissionToken;
+  options?: ReplyDispatchRun;
+  transcriptStart: PreparedReplyTranscriptStart | null;
+};
+
 export type BlockReplyContext = {
   abortSignal?: AbortSignal;
   timeoutMs?: number;
@@ -181,7 +189,10 @@ export type GetReplyOptions = {
   imageOrder?: PromptImageOrderEntry[];
   /** Ordered media facts whose model-facing text projection is already present in the prompt. */
   media?: MediaFact[];
+  /** Return "reply-dispatch" synchronously to accept the offered completion ownership. */
+  onPreparedAgentRunStart?: (start: PreparedAgentRunStart) => unknown;
   /**
+   * @deprecated Use onPreparedAgentRunStart with a prepared transcript boundary.
    * Notifies when an agent run starts. Return "reply-dispatch" synchronously to accept
    * completion ownership offered in options; all other legacy callback results are ignored.
    */
