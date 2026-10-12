@@ -452,7 +452,6 @@ function openAgentDatabaseBackend(
     "session.transcript.anchors.read": loadAgentTranscriptReadOperations,
     "session.transcript.coldMetadata.read": loadAgentTranscriptReadOperations,
     "session.entries.replace": loadAgentReplacementOperations,
-    "session.entries.replaceWithNativeBindings": loadAgentReplacementOperations,
     "session.restart.recover": loadAgentRestartRecoveryOperations,
     "session.entry.acp": loadAgentAcpOperations,
     "session.providerReview.compare": loadAgentProviderReviewOperations,
@@ -614,15 +613,18 @@ function openAgentDatabaseBackend(
           ? command.input
           : command.type === "session.messageCut.commit"
             ? command.input.nativeBindings
-            : command.type === "session.agentPurge.commit" ||
-                command.type === "session.maintenance.finalize" ||
-                command.type === "session.entries.replaceWithNativeBindings"
+            : command.type === "session.entries.replace" ||
+                command.type === "session.agentPurge.commit" ||
+                command.type === "session.maintenance.finalize"
               ? command.input.nativeBindings
               : undefined;
       if (nativeBindings) {
         return Promise.all([
           preparing,
           prepareAgentNativeBindingOperation(nativeBindings, input.environment),
+          command.type === "session.entries.replace" && command.input.initializeTranscript
+            ? prepareAgentTranscript()
+            : undefined,
         ]).then(() => {});
       }
       if (

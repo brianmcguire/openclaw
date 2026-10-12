@@ -24,10 +24,7 @@ import {
   hasPreparedNativeSessionDeletion,
   runSqliteSessionDeletionTransaction as runOpenClawAgentWriteTransaction,
 } from "./session-accessor.sqlite-deletion.js";
-import {
-  prepareSessionIdentityPublication,
-  publishCommittedSessionIdentity,
-} from "./session-accessor.sqlite-identity.js";
+import { prepareSessionIdentityPublication } from "./session-accessor.sqlite-identity.js";
 import { finalizeSessionEntryMaintenancePlansAfterWriterReleaseBestEffort } from "./session-accessor.sqlite-maintenance.js";
 import { runPreparedSqliteSessionWrite } from "./session-accessor.sqlite-prepared-write.js";
 import {
@@ -59,7 +56,6 @@ import type {
 } from "./session-accessor.types.js";
 import { getSessionActorStorageBinding } from "./session-actor-storage-binding.js";
 import { readSessionActorStorageResult } from "./session-actor-storage-result.js";
-import type { SessionEntryNativeReplacementCandidate } from "./session-entry-replacement.worker.js";
 import {
   captureIncognitoSessionOperation,
   publishIncognitoSessionEntry,
@@ -404,12 +400,11 @@ async function applySqliteSessionEntryReplacementProjection<T, TReplacement>(
       return {
         deletedEntries: deletedOwners,
         commit: async (assertSourceCurrent) => {
-          const nativeBindings =
-            useWorker && !incognito ? captureNativeSessionWorkerDeletion(deletedOwners) : undefined;
-          // Opaque callbacks and initialization rollback retain their native transaction.
+          const nativeDeletion = captureNativeSessionWorkerDeletion(deletedOwners);
+          // Only opaque companions require the parent's synchronous transaction view.
           const workerCommit =
             Boolean(incognito) ||
-            (useWorker && (!hasPreparedNativeSessionDeletion() || nativeBindings !== undefined));
+            (useWorker && (!hasPreparedNativeSessionDeletion() || Boolean(nativeDeletion)));
           const preparedPreservation =
             params.skipMaintenance === false
               ? await prepareSessionMaintenancePreservation(params.storePath, {
@@ -548,53 +543,6 @@ async function applySqliteSessionEntryReplacementProjection<T, TReplacement>(
             if (typeof snapshot.databaseIdentity !== "string") {
               throw new Error("Session replacement requires its durable database identity");
             }
-            if (nativeBindings) {
-              const { runSessionNativeBindingWorkerOperation } =
-                await import("./session-native-binding.js");
-              return await runSessionNativeBindingWorkerOperation<
-                SessionEntryNativeReplacementCandidate,
-                {
-                  maintenancePlans: SessionEntryNativeReplacementCandidate["result"]["maintenancePlans"];
-                  result: T;
-                }
-              >({
-                database: databaseOptions,
-                databaseIdentity: snapshot.databaseIdentity,
-                retainedExecution: params.retainedExecution,
-                agentId: resolved.agentId,
-                entries: deletedOwners,
-                captured: nativeBindings,
-                assertCurrent,
-                candidateKind: "session-entry-native-replacement",
-                execute: (worker, participants) =>
-                  worker.execute({
-                    type: "session.entries.replaceWithNativeBindings",
-                    input: {
-                      ...input,
-                      initializeTranscript: creation?.initializeTranscript,
-                      nativeBindings: participants,
-                    },
-                  }),
-                onAcknowledged: (candidate) =>
-                  params.onLifecycleCommitted?.(candidate.result.pendingArchiveRecovery),
-                async onCommitted(candidate, published, identity, context) {
-                  if (published) {
-                    publishCommittedSessionIdentity(
-                      resolved.agentId,
-                      identity,
-                      published.previous,
-                      published.current,
-                      published.prepared,
-                    );
-                  }
-                  await params.afterCommitted?.(operation.result, context);
-                  return {
-                    maintenancePlans: candidate.result.maintenancePlans,
-                    result: operation.result,
-                  };
-                },
-              });
-            }
             const committed = await commitSessionEntryReplacementsInWorker(
               databaseOptions,
               snapshot.databaseIdentity,
@@ -608,6 +556,7 @@ async function applySqliteSessionEntryReplacementProjection<T, TReplacement>(
                   : undefined,
               },
               params.retainedExecution,
+              nativeDeletion,
             );
             return { maintenancePlans: committed.maintenancePlans, result: operation.result };
           } finally {

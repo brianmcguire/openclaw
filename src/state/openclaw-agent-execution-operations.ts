@@ -1,9 +1,14 @@
 import type { SessionTranscriptReadScope } from "../config/sessions/session-accessor.sqlite-contract.js";
+import type {
+  SessionEntryReplacementCandidate,
+  SessionEntryReplacementCommit,
+} from "../config/sessions/session-accessor.sqlite-replacement-types.js";
 import type { ResolvedTranscriptReadScope } from "../config/sessions/session-accessor.sqlite-scope-helpers.js";
 import type {
   SessionEntryCohortRequest,
   SessionEntryReadWorkerInput,
 } from "../config/sessions/session-entry-read.types.js";
+import type { SessionEntryWritePostimages } from "../config/sessions/session-entry-write-postimage.js";
 import type {
   SessionTranscriptExecutionReadInputs,
   SessionTranscriptExecutionReadResult,
@@ -14,7 +19,11 @@ import {
 } from "../infra/sqlite-worker-operation-admission.js";
 import { readTrajectoryRuntimeRetentionLease } from "../trajectory/runtime-retention.contract.js";
 import type { AgentDatabaseMaintenanceOperations } from "./openclaw-agent-execution-maintenance.js";
-import type { loadAgentTranscriptOperations } from "./openclaw-agent-execution-transcript.worker.js";
+import {
+  initializeReplacementTranscript,
+  type loadAgentTranscriptOperations,
+  type TranscriptInitialization,
+} from "./openclaw-agent-execution-transcript.worker.js";
 import type { loadAgentVoiceSessionOperations } from "./openclaw-agent-execution-voice-operations.js";
 import type { AgentWorkerOperationContext } from "./openclaw-agent-operation-context.js";
 import type { WorkerOperationHandlers, WorkerOperations } from "./worker-operation-registry.js";
@@ -195,11 +204,74 @@ export async function loadAgentTranscriptReadOperations() {
 }
 
 export async function loadAgentReplacementOperations() {
-  const kernel = await import("../config/sessions/session-entry-replacement.worker.js");
+  const [kernel, { sealSessionEntryPublicationSource }, nativeBindings, transfers] =
+    await Promise.all([
+      import("../config/sessions/session-accessor.sqlite-replacement-state.js"),
+      import("../config/sessions/session-entry-publication-source.js"),
+      import("../config/sessions/session-native-binding.worker.js"),
+      import("../config/sessions/session-entry-patch.worker.js"),
+    ]);
   return {
-    "session.entries.replace": kernel.replaceSessionEntriesInWorker,
-    "session.entries.replaceWithNativeBindings":
-      kernel.replaceSessionEntriesWithNativeBindingsInWorker,
+    "session.entries.replace": (
+      input: SessionEntryReplacementCommit & { initializeTranscript?: TranscriptInitialization },
+      context,
+    ) => {
+      const replace = (current: ReturnType<AgentWorkerOperationContext["open"]>) => {
+        const postimages: SessionEntryWritePostimages = new Map();
+        const result = kernel.commitSessionEntryReplacementsInDatabase(
+          current,
+          input,
+          () =>
+            initializeReplacementTranscript(current, context.options, input.initializeTranscript),
+          undefined,
+          undefined,
+          postimages,
+        );
+        const publication = kernel.prepareSessionEntryReplacementPublication(result, current, {
+          captureFullFacts: true,
+          postimages,
+        });
+        const candidate = { ...result, publication };
+        if (publication.source && publication.fullEntries?.size) {
+          sealSessionEntryPublicationSource(publication.source);
+        }
+        kernel.boundSessionEntryReplacementPublication(publication, candidate);
+        return candidate;
+      };
+      if (input.nativeBindings) {
+        return nativeBindings.runSessionNativeBindingTransaction(
+          input.nativeBindings,
+          context,
+          "session.entry-replacements",
+          "Session replacement",
+          (current, wrapReceipt) => {
+            const result = replace(current);
+            const candidate: SessionEntryReplacementCandidate = {
+              kind: "session-entry-replacements",
+              result,
+              publication: result.publication,
+            };
+            return transfers.transferSessionEntryWorkerCandidate(
+              current,
+              context.admit,
+              candidate,
+              wrapReceipt,
+            );
+          },
+        );
+      }
+      return context.writeTransaction(
+        "session.entry-replacements",
+        "Session replacement",
+        (current) => {
+          const candidate = replace(current);
+          const publication = candidate.publication;
+          deferSqliteWorkerCommitReceipt(current.db, publication);
+          context.admit("commit", publication);
+          return candidate;
+        },
+      );
+    },
   } satisfies Handlers;
 }
 
