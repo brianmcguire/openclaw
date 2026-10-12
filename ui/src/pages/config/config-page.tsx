@@ -38,7 +38,6 @@ import {
   projectAgentIdentity,
 } from "../../lib/reactive/domain-capabilities.ts";
 import { t } from "../../lib/reactive/i18n.ts";
-import { projectTheme } from "../../lib/reactive/theme.ts";
 import { defineSolidBridge } from "../../lit/solid-bridge.ts";
 import { BrowserLinkPreferencesRow } from "./browser-link-preferences.tsx";
 import { ConfigPageController, extractQuickSettingsSecurity } from "./config-page.ts";
@@ -243,7 +242,6 @@ function ConfigPageContent(props: ConfigPageProps & { host: HTMLElement }) {
   const config = projectApplicationConfig(context.config);
   const overlays = projectOverlays(context.overlays);
   const webPush = projectWebPush(context.webPush);
-  const theme = projectTheme(context.theme);
   const nativeDevice = context.nativeDeviceSettings
     ? projectNativeDeviceSettings(context.nativeDeviceSettings)
     : null;
@@ -264,11 +262,11 @@ function ConfigPageContent(props: ConfigPageProps & { host: HTMLElement }) {
     config,
     overlays,
     webPush,
-    theme.preferences,
     nativeDevice,
     nativeNotifications,
   ].flatMap((source) => (source ? [source.subscribe(refresh)] : []));
-  subscriptions.push(subscribeLobsterdex(refresh));
+  // Server selection intent can change while the stored preferences stay equal.
+  subscriptions.push(context.theme.subscribe(refresh), subscribeLobsterdex(refresh));
   createEffect(
     () => [props.pageId ?? "advanced", props.routeData ?? null] as const,
     ([pageId, routeData]) => controller.updateRoute(pageId, routeData),

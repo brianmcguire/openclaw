@@ -285,12 +285,15 @@ suite.define(() => {
       await proxyReconnect(page, gateway, async () => {
         await themeCard(page, "knot").click();
         await expectThemeActive(page, "knot");
+        expect(await readPendingPrefStorage(page)).toEqual(
+          expect.arrayContaining([expect.objectContaining({ theme: "knot", accent: "theme" })]),
+        );
       });
 
-      const patch = await gateway.waitForRequest("config.patch");
-      expect(patchPrefs(patch)).toEqual({ theme: "knot", accent: "theme" });
       // Reconnect owns one authoritative read even while the pending LWW preference shadows it.
       await waitForRequestCount(gateway, "config.get", configGetsBeforeEdit + 1);
+      const patch = await gateway.waitForRequest("config.patch");
+      expect(patchPrefs(patch)).toEqual({ theme: "knot", accent: "theme" });
 
       await gateway.setMethodResponse("config.get", committed);
       await gateway.resolveDeferred("config.patch", committed);
@@ -338,6 +341,9 @@ suite.define(() => {
 
       await expectThemeActive(page, "knot");
       expect(await gateway.getRequests("config.patch")).toHaveLength(0);
+      expect(await readPendingPrefStorage(page)).toEqual(
+        expect.arrayContaining([expect.objectContaining({ theme: "knot", accent: "theme" })]),
+      );
 
       await gateway.deferNext("config.patch");
       await gateway.setMethodResponse("config.get", committed);

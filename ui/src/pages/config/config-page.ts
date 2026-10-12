@@ -344,11 +344,11 @@ export class ConfigPageController {
       this.previousClient = snapshot.client;
       this.previousHello = snapshot.hello;
       this.previousPhase = snapshot.phase;
+      this.customThemeImportOwner.synchronizeScope(
+        gateway.connection.gatewayUrl,
+        this.context.theme.serverSelection,
+      );
     }
-    this.customThemeImportOwner.synchronizeScope(
-      gateway.connection.gatewayUrl,
-      this.context.theme.serverSelection,
-    );
     this.synchronizeRuntimeConfig(this.context.runtimeConfig);
     this.settings = this.customThemeImportOwner.adoptSettings(
       this.settings,
