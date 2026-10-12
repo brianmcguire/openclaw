@@ -1,11 +1,8 @@
-import { createSignal, onSettled, For, Show } from "solid-js";
+import { createSignal, For, merge, onSettled, Show } from "solid-js";
 import type { UiSettings } from "../../../app/settings.ts";
-import { renderBoardGrantedCapabilities } from "../../../components/board/board-widget-capabilities.ts";
-import {
-  renderBoardWidgetMenuItems,
-  type BoardWidgetPageMenu,
-} from "../../../components/board/board-widget-cell-render.ts";
-import { icons } from "../../../components/icons.ts";
+import { BoardGrantedCapabilities } from "../../../components/board/board-widget-capabilities.solid.tsx";
+import { BoardWidgetMenuItems } from "../../../components/board/board-widget-cell-render.solid.tsx";
+import type { BoardWidgetPageMenu } from "../../../components/board/board-widget-cell-render.ts";
 import { activateMenuShortcut } from "../../../components/menu-shortcuts.ts";
 import {
   EMPTY_SESSION_MENU_DATA,
@@ -15,22 +12,20 @@ import {
 } from "../../../components/session-menu-actions.ts";
 import {
   compactSessionMenuViewForValue,
-  renderCompactSessionMenuNavigationItem,
   type CompactSessionMenuView,
 } from "../../../components/session-menu-compact.ts";
 import { useSessionMenuControllers } from "../../../components/session-menu-controllers.ts";
-import { renderHeaderTerminalAction } from "../../../components/session-menu-options.ts";
+import { useSessionMenuView } from "../../../components/session-menu-view.tsx";
 import type { SessionCreatedActor } from "../../../components/session-owner-chip.ts";
-import { Icon } from "../../../components/solid/icon.tsx";
+import { Icon, type IconName } from "../../../components/solid/icon.tsx";
 import { useOptionalApplication } from "../../../lib/reactive/context.ts";
-import { i18nRevision, t } from "../../../lib/reactive/i18n.ts";
+import { t } from "../../../lib/reactive/i18n.ts";
 import { defineSolidBridge, type SolidBridgeElement } from "../../../lit/solid-bridge.ts";
-import type { LegacyTemplateResult as TemplateResult } from "../../../lit/solid-content.tsx";
-import { LitContent } from "../../../lit/solid-content.tsx";
+import { LitContent, type LegacyTemplateResult } from "../../../lit/solid-content.tsx";
 import { isChatBubbleMode, setChatBubbleMode } from "../chat-bubble-mode.ts";
-import { ChatSessionSharing } from "./chat-session-sharing.solid.tsx";
 import {
   canManageChatSessionSharing,
+  renderChatSessionSharing,
   selectChatSessionSharingItem,
   type ChatSessionSharingProps,
 } from "./chat-session-sharing.ts";
@@ -41,11 +36,10 @@ export type HeaderMenuAction =
   | { kind: "stop-cloud-worker" }
   | { kind: "plugin"; id: string };
 export type HeaderMenuActionKind = HeaderMenuAction["kind"];
-
 export type HeaderMenuQuickAction = {
   id: string;
   label: string;
-  icon: TemplateResult;
+  icon: LegacyTemplateResult;
   description?: string;
   variant?: "danger";
 } & (
@@ -59,20 +53,8 @@ export type HeaderMenuQuickAction = {
     }
 );
 
-// SAFETY: Before the host supplies preferences, absent fields retain the existing menu defaults.
-const EMPTY_SETTINGS = {} as UiSettings;
-
 type CompactMenuView = CompactSessionMenuView | "panels" | "layout" | "sharing" | "view";
-type MenuSelectEvent = CustomEvent<{ item: { value?: string } }>;
-
-const COMPACT_MENU_VIEW_BY_VALUE: Record<string, CompactMenuView> = {
-  "compact:open-layout": "layout",
-  "compact:open-panels": "panels",
-  "compact:open-sharing": "sharing",
-  "compact:open-view": "view",
-};
-
-export type ChatHeaderSessionMenuProps = {
+type HeaderMenuProps = {
   session: SessionMenuData;
   worktreePath: string | null;
   onboarding: boolean;
@@ -82,7 +64,14 @@ export type ChatHeaderSessionMenuProps = {
   mainKey: string;
   copyMarkdownAllowed: boolean;
   splitAllowed: boolean;
-  settings: UiSettings;
+  settings: Pick<
+    UiSettings,
+    | "chatShowThinking"
+    | "chatShowToolCalls"
+    | "chatPersistCommentary"
+    | "chatBubbleSessionKeys"
+    | "chatBubbleDisabledSessionKeys"
+  >;
   panelActions: HeaderMenuQuickAction[];
   layoutActions: HeaderMenuQuickAction[];
   sessionActions: HeaderMenuQuickAction[];
@@ -101,12 +90,24 @@ export type ChatHeaderSessionMenuProps = {
   onSettingsChange: (patch: Partial<UiSettings>) => void;
   onAction: (action: HeaderMenuAction) => void;
 };
-export function ChatHeaderSessionMenuContent(
-  props: ChatHeaderSessionMenuProps,
-  host: SolidBridgeElement<ChatHeaderSessionMenuProps>,
+
+const COMPACT_MENU_VIEW_BY_VALUE: Record<string, CompactMenuView> = {
+  "compact:open-layout": "layout",
+  "compact:open-panels": "panels",
+  "compact:open-sharing": "sharing",
+  "compact:open-view": "view",
+};
+
+function ChatHeaderSessionMenuContent(
+  props: HeaderMenuProps,
+  host: SolidBridgeElement<HeaderMenuProps>,
 ) {
   const [revision, setRevision] = createSignal(0, { ownedWrite: true });
-  const managementHost = useSessionMenuControllers(
+  const [compactView, setCompactView] = createSignal<CompactMenuView>("root");
+  let dropdown: HTMLElement & { open: boolean };
+  const state = merge(props, { selectionCount: 1, navigationAllowed: true, disabled: false });
+  const readState = () => state;
+  const controllerHost = useSessionMenuControllers(
     host,
     useOptionalApplication(),
     () => setRevision((value) => value + 1),
@@ -115,38 +116,32 @@ export function ChatHeaderSessionMenuContent(
       return Object.values(props);
     },
   );
-  const [compactView, setCompactView] = createSignal<CompactMenuView>("root");
-  const managementActions = new SessionMenuActions(
-    managementHost,
-    () => ({
-      session: props.session,
-      selectionCount: 1,
-      compact: props.compact,
-      navigationAllowed: true,
-      copyMarkdownAllowed: props.copyMarkdownAllowed,
-      splitAllowed: props.splitAllowed,
-      renderOpenInExtra: (inline) =>
-        renderHeaderTerminalAction(inline, props.actionDisabledReasons["continue-in-terminal"]),
-      disabled: false,
-      actionDisabledReasons: props.actionDisabledReasons,
-      forkDisabled: props.forkDisabled,
-      forkFromLastCompleted: props.forkFromLastCompleted,
-      archiveAllowed: props.archiveAllowed,
-      archiveShortcut: props.archiveShortcut,
-      deleteAllowed: props.deleteAllowed,
-      groups: props.groups,
-      currentOwner: props.currentOwner,
-      worktreePath: props.worktreePath,
-    }),
+  const close = () => {
+    dropdown.open = false;
+  };
+  const actions = new SessionMenuActions(
+    controllerHost,
+    readState,
     (action) => props.onAction(action),
-    () => {
-      const dropdown = host.querySelector<HTMLElement & { open: boolean }>("wa-dropdown");
-      if (dropdown) {
-        dropdown.open = false;
-      }
-    },
+    close,
   );
-  const handleSelect = (event: MenuSelectEvent) => {
+  const view = useSessionMenuView(host, actions, readState, revision, {
+    renderOpenInExtra: (inline) => (
+      <wa-dropdown-item
+        slot={inline ? undefined : "submenu"}
+        class="session-menu__item"
+        value="continue-in-terminal"
+        prop:disabled={Boolean(props.actionDisabledReasons["continue-in-terminal"])}
+        title={props.actionDisabledReasons["continue-in-terminal"]}
+      >
+        <span slot="icon" class="session-menu__icon" aria-hidden="true">
+          <Icon name="terminal" />
+        </span>
+        <span class="session-menu__text">{t("chat.sessionHeader.continueInTerminal.action")}</span>
+      </wa-dropdown-item>
+    ),
+  });
+  const handleSelect = (event: CustomEvent<{ item: { value?: string } }>) => {
     const value = event.detail.item.value;
     if (!value) {
       return;
@@ -160,12 +155,12 @@ export function ChatHeaderSessionMenuContent(
     if (nextView) {
       event.preventDefault();
       setCompactView(nextView);
-      if (managementView) {
-        managementActions.prepareCompactView(managementView);
+      if (managementView === "icon") {
+        view.appearance.prepare();
       } else if (nextView === "sharing" && !props.sharing?.openDisabledReason) {
         props.sharing?.onOpen();
       }
-      onSettled(() => managementActions.focusCurrentView());
+      onSettled(() => actions.focusCurrentView());
       return;
     }
     if (value === "open-command-palette") {
@@ -174,13 +169,13 @@ export function ChatHeaderSessionMenuContent(
     }
     if (value.startsWith("quick:")) {
       const [, group, id] = value.split(":");
-      const actions =
+      const entries =
         group === "panels"
           ? props.panelActions
           : group === "session"
             ? props.sessionActions
             : props.layoutActions;
-      const action = actions.find((candidate) => candidate.id === id);
+      const action = entries.find((candidate) => candidate.id === id);
       if (action && action.kind !== "status" && !action.disabled) {
         action.onActivate();
       }
@@ -226,351 +221,286 @@ export function ChatHeaderSessionMenuContent(
       }
       return;
     }
-    if (managementActions.handleSelect(value)) {
+    if (actions.handleSelect(value)) {
       event.preventDefault();
       return;
     }
     if (value === "continue-in-terminal" && !props.actionDisabledReasons[value]) {
-      const dropdown = host.querySelector<HTMLElement & { open: boolean }>("wa-dropdown");
-      if (dropdown) {
-        dropdown.open = false;
-      }
+      close();
       props.onAction({ kind: value });
     }
   };
-  function QuickActionLabel(item: { action: HeaderMenuQuickAction }) {
-    return (
-      <span class="session-menu__text">
-        {item.action.label}
-        <Show when={item.action.description}>
-          <span class="session-menu__description">{item.action.description}</span>
-        </Show>
-      </span>
-    );
-  }
-  function QuickActionItems(items: {
+  const QuickActions = (input: {
     group: "panels" | "layout" | "session";
-    actions: HeaderMenuQuickAction[];
+    entries: HeaderMenuQuickAction[];
     inline?: boolean;
-  }) {
-    return (
-      <For each={items.actions} keyed={(action) => action.id}>
-        {(action) => {
-          const activeAction = () => {
-            const value = action();
-            return value.kind === "status" ? null : value;
-          };
-          return (
-            <Show
-              when={activeAction()}
-              fallback={
-                <div
-                  slot={items.inline ? undefined : "submenu"}
-                  class="session-menu__status"
-                  data-menu-status={action().id}
-                  role="note"
-                >
-                  <span class="session-menu__check" aria-hidden="true">
-                    <LitContent value={action().icon} />
-                  </span>
-                  <QuickActionLabel action={action()} />
-                </div>
-              }
-            >
-              {(command) => (
-                <wa-dropdown-item
-                  slot={items.inline ? undefined : "submenu"}
-                  class="session-menu__item"
-                  value={`quick:${items.group}:${command().id}`}
-                  type={command().active === undefined ? undefined : "checkbox"}
-                  prop:checked={command().active ?? false}
-                  disabled={command().disabled}
-                  variant={command().variant}
-                >
-                  <span slot="icon" class="session-menu__icon" aria-hidden="true">
-                    <LitContent value={command().icon} />
-                  </span>
-                  <QuickActionLabel action={command()} />
-                  <Show when={typeof command().badge === "number" && (command().badge ?? 0) > 0}>
-                    <span slot="details" class="session-menu__sub">
-                      {command().badge}
-                    </span>
-                  </Show>
-                </wa-dropdown-item>
-              )}
-            </Show>
-          );
-        }}
-      </For>
-    );
-  }
-  function MenuSubmenu(menu: { group: "panels" | "layout" | "view" }) {
-    const actions = () => (menu.group === "panels" ? props.panelActions : props.layoutActions);
-    const label = () =>
-      t(
-        menu.group === "view"
-          ? "chat.view.menu"
-          : menu.group === "panels"
-            ? "chat.sessionHeader.panels"
-            : "chat.sessionHeader.layout",
-      );
-    const iconName = () =>
-      menu.group === "view" ? "eye" : menu.group === "panels" ? "panelRightOpen" : "columns2";
-    const icon = () => icons[iconName()];
-    return (
-      <Show when={menu.group === "view" || actions().length > 0}>
-        <Show
-          when={props.compact}
-          fallback={
-            <wa-dropdown-item class="session-menu__item">
-              <span slot="icon" class="session-menu__icon" aria-hidden="true">
-                <Icon name={iconName()} />
-              </span>
-              <span class="session-menu__text">{label()}</span>
-              <Show
-                when={menu.group === "view"}
-                fallback={
-                  <QuickActionItems
-                    group={menu.group === "panels" ? "panels" : "layout"}
-                    actions={actions()}
-                  />
-                }
-              >
-                <ViewSubmenu />
-              </Show>
-            </wa-dropdown-item>
-          }
-        >
-          <LitContent
-            value={renderCompactSessionMenuNavigationItem({
-              value: `compact:open-${menu.group}`,
-              label: label(),
-              icon: icon(),
-            })}
-          />
-        </Show>
-      </Show>
-    );
-  }
-  function ViewItem(item: { value: string; label: string; checked: boolean; inline?: boolean }) {
-    return (
-      <wa-dropdown-item
-        slot={item.inline ? undefined : "submenu"}
-        class="session-menu__item"
-        type="checkbox"
-        value={`view:${item.value}`}
-        prop:checked={item.checked}
-        disabled={props.onboarding}
-        title={props.onboarding ? t("chat.onboardingDisabled") : undefined}
-      >
-        <span class="session-menu__text">{item.label}</span>
-      </wa-dropdown-item>
-    );
-  }
-  function ViewSubmenu(view: { inline?: boolean }) {
-    return (
-      <>
-        <ViewItem
-          inline={view.inline}
-          value="reasoning"
-          label={t("chat.view.reasoning")}
-          checked={!props.onboarding && props.settings.chatShowThinking}
-        />
-        <ViewItem
-          inline={view.inline}
-          value="tool-calls"
-          label={t("chat.view.toolCalls")}
-          checked={props.onboarding || props.settings.chatShowToolCalls}
-        />
-        <ViewItem
-          inline={view.inline}
-          value="commentary"
-          label={t("chat.view.commentary")}
-          checked={props.settings.chatPersistCommentary !== false}
-        />
-        <Show when={props.bubbleModeEnabled}>
-          <ViewItem
-            inline={view.inline}
-            value="speech-bubbles"
-            label={t("chat.view.speechBubbles")}
-            checked={isChatBubbleMode(
-              props.settings,
-              props.session.target?.key ?? "",
-              true,
-              props.mainKey,
-            )}
-          />
-        </Show>
-        <Show when={props.preferencesBrowserOnly}>
-          <div slot={view.inline ? undefined : "submenu"} class="session-menu__info" role="note">
-            {t("quickSettings.personal.browserOnly")}
+  }) => (
+    <For each={input.entries}>
+      {(action) => {
+        const label = (
+          <span class="session-menu__text">
+            {action.label}
+            {action.description ? (
+              <span class="session-menu__description">{action.description}</span>
+            ) : undefined}
+          </span>
+        );
+        return action.kind === "status" ? (
+          <div
+            slot={input.inline ? undefined : "submenu"}
+            class="session-menu__status"
+            data-menu-status={action.id}
+            role="note"
+          >
+            <span class="session-menu__check" aria-hidden="true">
+              <LitContent value={action.icon} />
+            </span>
+            {label}
           </div>
-        </Show>
-      </>
-    );
-  }
-  function renderCompactView() {
-    const view = compactView();
-    if (
-      view === "root" ||
-      view === "open-in" ||
-      view === "copy" ||
-      view === "assign-owner" ||
-      view === "icon" ||
-      view === "group" ||
-      view === "snooze" ||
-      view === "advanced" ||
-      view === "archive"
-    ) {
-      return (
-        <LitContent
-          value={(revision(), i18nRevision(), managementActions.renderCompactView(view))}
-        />
-      );
-    }
-    const body = (
-      <>
-        {view === "panels" ? (
-          <QuickActionItems group="panels" actions={props.panelActions} inline />
-        ) : view === "layout" ? (
-          <QuickActionItems group="layout" actions={props.layoutActions} inline />
-        ) : view === "sharing" && props.sharing ? (
-          <ChatSessionSharing {...props.sharing} inline />
         ) : (
-          <ViewSubmenu inline />
-        )}
-      </>
-    );
-    return (
-      <>
-        <wa-dropdown-item class="session-menu__item session-menu__back" value="compact:back">
-          <span slot="icon" class="session-menu__icon" aria-hidden="true">
-            <Icon name="arrowLeft" />
-          </span>
-          <span class="session-menu__text">{t("common.back")}</span>
-        </wa-dropdown-item>
-        <div class="session-menu__separator" role="separator" />
-        {body}
-      </>
-    );
-  }
-  function RootView() {
-    return (
-      <>
-        <wa-dropdown-item class="session-menu__item" value="open-command-palette">
-          <span slot="icon" class="session-menu__icon" aria-hidden="true">
-            <Icon name="search" />
-          </span>
-          <span class="session-menu__text">{t("chat.openCommandPalette")}</span>
-        </wa-dropdown-item>
-        <div class="session-menu__separator" role="separator" />
-        {props.boardWidgetMenu ? (
+          <wa-dropdown-item
+            slot={input.inline ? undefined : "submenu"}
+            class="session-menu__item"
+            value={`quick:${input.group}:${action.id}`}
+            type={action.active === undefined ? undefined : "checkbox"}
+            prop:checked={action.active ?? false}
+            prop:disabled={action.disabled}
+            variant={action.variant}
+          >
+            <span slot="icon" class="session-menu__icon" aria-hidden="true">
+              <LitContent value={action.icon} />
+            </span>
+            {label}
+            {typeof action.badge === "number" && action.badge > 0 ? (
+              <span slot="details" class="session-menu__sub">
+                {action.badge}
+              </span>
+            ) : undefined}
+          </wa-dropdown-item>
+        );
+      }}
+    </For>
+  );
+  const ViewOption = (input: {
+    inline?: boolean;
+    value: string;
+    label: string;
+    checked: boolean;
+  }) => (
+    <wa-dropdown-item
+      slot={input.inline ? undefined : "submenu"}
+      class="session-menu__item"
+      type="checkbox"
+      value={`view:${input.value}`}
+      prop:checked={input.checked}
+      prop:disabled={props.onboarding}
+      title={props.onboarding ? t("chat.onboardingDisabled") : undefined}
+    >
+      <span class="session-menu__text">{input.label}</span>
+    </wa-dropdown-item>
+  );
+  const ViewOptions = (input: { inline?: boolean }) => (
+    <>
+      <ViewOption
+        inline={input.inline}
+        value="reasoning"
+        label={t("chat.view.reasoning")}
+        checked={props.onboarding ? false : props.settings.chatShowThinking}
+      />
+      <ViewOption
+        inline={input.inline}
+        value="tool-calls"
+        label={t("chat.view.toolCalls")}
+        checked={props.onboarding ? true : props.settings.chatShowToolCalls}
+      />
+      <ViewOption
+        inline={input.inline}
+        value="commentary"
+        label={t("chat.view.commentary")}
+        checked={props.settings.chatPersistCommentary !== false}
+      />
+      {props.bubbleModeEnabled ? (
+        <ViewOption
+          inline={input.inline}
+          value="speech-bubbles"
+          label={t("chat.view.speechBubbles")}
+          checked={isChatBubbleMode(
+            props.settings,
+            props.session.target?.key ?? "",
+            true,
+            props.mainKey,
+          )}
+        />
+      ) : undefined}
+      {props.preferencesBrowserOnly ? (
+        <div slot={input.inline ? undefined : "submenu"} class="session-menu__info" role="note">
+          {t("quickSettings.personal.browserOnly")}
+        </div>
+      ) : undefined}
+    </>
+  );
+  const Submenu = (input: {
+    group: "panels" | "layout" | "view" | "sharing";
+    label: string;
+    icon: IconName;
+    disabled?: boolean;
+  }) => (
+    <wa-dropdown-item
+      class="session-menu__item"
+      value={props.compact ? `compact:open-${input.group}` : undefined}
+      prop:disabled={input.disabled}
+    >
+      <span slot="icon" class="session-menu__icon" aria-hidden="true">
+        <Icon name={input.icon} />
+      </span>
+      <span class="session-menu__text">{input.label}</span>
+      {props.compact ? (
+        <span slot="details" class="session-menu__icon session-menu__chevron" aria-hidden="true">
+          <Icon name="chevronRight" />
+        </span>
+      ) : input.group === "view" ? (
+        <ViewOptions />
+      ) : (
+        <QuickActions
+          group={input.group === "panels" ? "panels" : "layout"}
+          entries={input.group === "panels" ? props.panelActions : props.layoutActions}
+        />
+      )}
+    </wa-dropdown-item>
+  );
+  const Compact = () => (
+    <Show when={compactView()} keyed>
+      {(current) => {
+        if (
+          current !== "panels" &&
+          current !== "layout" &&
+          current !== "sharing" &&
+          current !== "view"
+        ) {
+          return <view.Compact view={current} />;
+        }
+        return (
+          <>
+            <wa-dropdown-item class="session-menu__item session-menu__back" value="compact:back">
+              <span slot="icon" class="session-menu__icon" aria-hidden="true">
+                <Icon name="arrowLeft" />
+              </span>
+              <span class="session-menu__text">{t("common.back")}</span>
+            </wa-dropdown-item>
+            <div class="session-menu__separator" role="separator" />
+            {current === "panels" ? (
+              <QuickActions group="panels" entries={props.panelActions} inline />
+            ) : current === "layout" ? (
+              <QuickActions group="layout" entries={props.layoutActions} inline />
+            ) : current === "sharing" && props.sharing ? (
+              <LitContent value={renderChatSessionSharing(props.sharing, true)} />
+            ) : (
+              <ViewOptions inline />
+            )}
+          </>
+        );
+      }}
+    </Show>
+  );
+  const Root = () => (
+    <>
+      <wa-dropdown-item class="session-menu__item" value="open-command-palette">
+        <span slot="icon" class="session-menu__icon" aria-hidden="true">
+          <Icon name="search" />
+        </span>
+        <span class="session-menu__text">{t("chat.openCommandPalette")}</span>
+      </wa-dropdown-item>
+      <div class="session-menu__separator" role="separator" />
+      <Show when={props.boardWidgetMenu}>
+        {(menu) => (
           <>
             <div class="board-widget__page-menu-heading">
-              <strong>
-                {props.boardWidgetMenu.widget.title || props.boardWidgetMenu.widget.name}
-              </strong>
+              <strong>{menu().widget.title || menu().widget.name}</strong>
             </div>
-            <LitContent
-              value={
-                (i18nRevision(),
-                renderBoardGrantedCapabilities(props.boardWidgetMenu.widget, "details"))
-              }
-            />
-            {props.boardWidgetMenu.canMutate ? (
-              <LitContent
-                value={
-                  (i18nRevision(),
-                  renderBoardWidgetMenuItems({
-                    widget: props.boardWidgetMenu.widget,
-                    tabs: props.boardWidgetMenu.tabs,
-                    disabled: false,
-                    prefix: "board-widget:",
-                  }))
-                }
+            <BoardGrantedCapabilities widget={menu().widget} presentation="details" />
+            {menu().canMutate ? (
+              <BoardWidgetMenuItems
+                widget={menu().widget}
+                tabs={menu().tabs}
+                disabled={false}
+                prefix="board-widget:"
               />
             ) : undefined}
             <div class="session-menu__separator" role="separator" />
           </>
-        ) : undefined}
-        <MenuSubmenu group="panels" />
-        <MenuSubmenu group="layout" />
-        {props.compact &&
-        props.sharing?.session &&
-        canManageChatSessionSharing(props.sharing.session) ? (
-          <LitContent
-            value={renderCompactSessionMenuNavigationItem({
-              value: "compact:open-sharing",
-              label: t("chat.sessionSharing.menu"),
-              icon: icons.users,
-              disabled: Boolean(props.sharing.openDisabledReason),
-            })}
-          />
-        ) : undefined}
-        <MenuSubmenu group="view" />
-        <div class="session-menu__separator" role="separator" />
-        <LitContent
-          value={(revision(), i18nRevision(), managementActions.renderPrimaryActions())}
+        )}
+      </Show>
+      {props.panelActions.length ? (
+        <Submenu group="panels" label={t("chat.sessionHeader.panels")} icon="panelRightOpen" />
+      ) : undefined}
+      {props.layoutActions.length ? (
+        <Submenu group="layout" label={t("chat.sessionHeader.layout")} icon="columns2" />
+      ) : undefined}
+      {props.compact &&
+      props.sharing?.session &&
+      canManageChatSessionSharing(props.sharing.session) ? (
+        <Submenu
+          group="sharing"
+          label={t("chat.sessionSharing.menu")}
+          icon="users"
+          disabled={Boolean(props.sharing.openDisabledReason)}
         />
-        <div class="session-menu__separator" role="separator" />
-        <LitContent
-          value={(revision(), i18nRevision(), managementActions.renderOrganizationActions())}
-        />
-        <QuickActionItems group="session" actions={props.sessionActions} inline />
-        <div class="session-menu__separator" role="separator" />
-        <LitContent
-          value={(revision(), i18nRevision(), managementActions.renderAdvancedAction())}
-        />
-      </>
-    );
-  }
-  const handleShow = () => {
-    setCompactView("root");
-    managementActions.loadOwners();
-    props.onOpen();
-  };
-  function render() {
-    const menuLabel = () => t("chat.sidebar.sessionMenu", { session: props.session.label });
-    return (
-      <wa-dropdown
-        class={[
-          "session-menu chat-header-session-menu",
-          {
-            "session-menu--compact": props.compact,
-            "chat-header-session-menu--compact": props.compact,
-            "chat-header-session-menu--compact-sharing":
-              props.compact && compactView() === "sharing",
-          },
-        ]}
-        placement="bottom-end"
+      ) : undefined}
+      <Submenu group="view" label={t("chat.view.menu")} icon="eye" />
+      <div class="session-menu__separator" role="separator" />
+      <view.Primary />
+      <div class="session-menu__separator" role="separator" />
+      <view.Organization />
+      <QuickActions group="session" entries={props.sessionActions} inline />
+      <div class="session-menu__separator" role="separator" />
+      <view.Advanced />
+    </>
+  );
+  const menuLabel = () => t("chat.sidebar.sessionMenu", { session: props.session.label });
+  return (
+    <wa-dropdown
+      ref={(element) => {
+        dropdown = element;
+      }}
+      class={[
+        "session-menu chat-header-session-menu",
+        {
+          "session-menu--compact chat-header-session-menu--compact": props.compact,
+          "chat-header-session-menu--compact-sharing": props.compact && compactView() === "sharing",
+        },
+      ]}
+      placement="bottom-end"
+      aria-label={menuLabel()}
+      onKeyDown={(event) => {
+        if (!actions.handleKeydown(event, view.appearance)) {
+          activateMenuShortcut(host, event);
+        }
+      }}
+      onWa-show={() => {
+        setCompactView("root");
+        actions.loadOwners();
+        props.onOpen();
+      }}
+      onWa-after-hide={actions.advanced.close}
+      onWa-select={handleSelect}
+    >
+      <button
+        slot="trigger"
+        class="btn btn--ghost btn--icon chat-icon-btn chat-header-session-menu__trigger"
+        type="button"
         aria-label={menuLabel()}
-        onKeyDown={(event: KeyboardEvent) => {
-          if (!managementActions.handleKeydown(event)) {
-            activateMenuShortcut(host, event);
-          }
-        }}
-        onWa-show={handleShow}
-        onWa-after-hide={managementActions.advanced.close}
-        onWa-select={handleSelect}
+        aria-haspopup="menu"
       >
-        <button
-          slot="trigger"
-          class="btn btn--ghost btn--icon chat-icon-btn chat-header-session-menu__trigger"
-          type="button"
-          aria-label={menuLabel()}
-          aria-haspopup="menu"
-        >
-          <Icon name="moreHorizontal" />
-        </button>
-        <Show when={props.compact && compactView() !== "root"} fallback={<RootView />}>
-          <>{renderCompactView()}</>
-        </Show>
-      </wa-dropdown>
-    );
-  }
-  return render();
+        <Icon name="moreHorizontal" />
+      </button>
+      <Show when={props.compact && compactView() !== "root"} fallback={<Root />}>
+        <Compact />
+      </Show>
+    </wa-dropdown>
+  );
 }
-export const ChatHeaderSessionMenu = defineSolidBridge<ChatHeaderSessionMenuProps>(
+
+defineSolidBridge<HeaderMenuProps>(
   "openclaw-chat-header-session-menu",
   ChatHeaderSessionMenuContent,
   {
@@ -584,7 +514,10 @@ export const ChatHeaderSessionMenu = defineSolidBridge<ChatHeaderSessionMenuProp
       mainKey: { default: "main", attribute: false },
       copyMarkdownAllowed: { default: false, attribute: false },
       splitAllowed: { default: false, attribute: false },
-      settings: { default: EMPTY_SETTINGS, attribute: false },
+      settings: {
+        default: { chatShowThinking: false, chatShowToolCalls: false },
+        attribute: false,
+      },
       panelActions: { default: [], attribute: false },
       layoutActions: { default: [], attribute: false },
       sessionActions: { default: [], attribute: false },
@@ -605,8 +538,9 @@ export const ChatHeaderSessionMenu = defineSolidBridge<ChatHeaderSessionMenuProp
     },
   },
 );
+
 declare global {
   interface HTMLElementTagNameMap {
-    "openclaw-chat-header-session-menu": SolidBridgeElement<ChatHeaderSessionMenuProps>;
+    "openclaw-chat-header-session-menu": SolidBridgeElement<HeaderMenuProps>;
   }
 }

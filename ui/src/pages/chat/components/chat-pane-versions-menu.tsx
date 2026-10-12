@@ -122,7 +122,7 @@ function ChatPaneVersionsMenuContent(props: Props) {
   );
 }
 
-export type ChatPaneVersionsMenu = SolidBridgeElement<Props>;
+type ChatPaneVersionsMenu = SolidBridgeElement<Props>;
 export const ChatPaneVersionsMenu = defineSolidBridge<Props>(
   "openclaw-chat-pane-versions-menu",
   ChatPaneVersionsMenuContent,

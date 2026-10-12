@@ -4,7 +4,7 @@ import { Icon } from "../../../components/solid/icon.tsx";
 import { resolveToolDisplayIcon } from "../../../lib/chat/tool-display-icon.ts";
 import { LitContent, SolidContentPresentation } from "../../../lit/solid-content.tsx";
 import type { PluginToolIcons } from "../chat-tool-icon-controller.ts";
-import type { ActivityHeadline } from "./chat-activity-headline.ts";
+import type { ActivityHeadline } from "./chat-activity-headline-selection.ts";
 import { renderToolIcon } from "./chat-tool-cards.ts";
 
 export type ChatActivityHeadlineProps = {

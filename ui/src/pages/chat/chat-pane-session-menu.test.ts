@@ -85,12 +85,21 @@ describe("chat pane session menu boundary", () => {
     expect(items.length).toBeGreaterThan(0);
     await Promise.all(items.map((item) => item.updateComplete));
     await menu.updateComplete;
+    const dropdown = menu.querySelector("wa-dropdown")!;
+    const reasoning = menu.querySelector('[value="view:reasoning"]')!;
+    const expectRetainedMenu = () => {
+      expect(menu.querySelector("wa-dropdown")).toBe(dropdown);
+      const currentItems = [...menu.querySelectorAll("wa-dropdown-item")];
+      expect(currentItems).toHaveLength(items.length);
+      for (const [index, item] of currentItems.entries()) {
+        expect(item).toBe(items[index]);
+      }
+    };
+    const itemUpdates = items.map((item) => vi.spyOn(item, "requestUpdate"));
     draw();
     await menu.updateComplete;
-    expect(menu.querySelectorAll("wa-dropdown-item")).toHaveLength(items.length);
-    expect(
-      [...menu.querySelectorAll("wa-dropdown-item")].every((item, index) => item === items[index]),
-    ).toBe(true);
+    expectRetainedMenu();
+    expect(itemUpdates.every((spy) => spy.mock.calls.length === 0)).toBe(true);
     container.querySelector(".chat-pane__layout-menu")!.dispatchEvent(
       new CustomEvent("wa-select", {
         detail: { item: { value: "session-files" } },
@@ -104,10 +113,7 @@ describe("chat pane session menu boundary", () => {
     session = { ...session };
     draw();
     await menu.updateComplete;
-    expect(menu.querySelectorAll("wa-dropdown-item")).toHaveLength(items.length);
-    expect(
-      [...menu.querySelectorAll("wa-dropdown-item")].every((item, index) => item === items[index]),
-    ).toBe(true);
+    expectRetainedMenu();
 
     session = { ...session, label: "Updated conversation" };
     pane.context.navigation.update({ sidebarEntries: [`session:${session.key}`] });
@@ -115,9 +121,11 @@ describe("chat pane session menu boundary", () => {
     await menu.updateComplete;
     expect(menu.session.label).toBe("Updated conversation");
     expect(menu.session.pinned).toBe(true);
+    expect(dropdown.getAttribute("aria-label")).toContain("Updated conversation");
     state.settings = { ...state.settings, chatShowThinking: !state.settings.chatShowThinking };
     draw();
     await menu.updateComplete;
+    expect(menu.querySelector('[value="view:reasoning"]')).toBe(reasoning);
     expect(menu.querySelector('[value="view:reasoning"]')?.hasAttribute("checked")).toBe(
       state.settings.chatShowThinking,
     );

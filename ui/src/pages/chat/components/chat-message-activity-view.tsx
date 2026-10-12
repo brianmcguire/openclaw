@@ -23,7 +23,7 @@ import {
 import { ownSessionLaunchCalls } from "../chat-spawned-subagent.ts";
 import { transcriptRunId } from "../chat-thread-run-identity.ts";
 import { ChatActivityHeadline } from "./chat-activity-headline.solid.tsx";
-import { selectActivityHeadline } from "./chat-activity-headline.ts";
+import { selectActivityHeadline } from "./chat-activity-headline-selection.ts";
 import type { NativeMessageGroupOptions } from "./chat-message-group-frame.ts";
 import {
   renderBrowserTabPreviews,

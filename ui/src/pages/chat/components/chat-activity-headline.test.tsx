@@ -11,7 +11,7 @@ import {
   ChatActivityHeadline,
   type ChatActivityHeadlineProps,
 } from "./chat-activity-headline.solid.tsx";
-import type { ActivityHeadline } from "./chat-activity-headline.ts";
+import type { ActivityHeadline } from "./chat-activity-headline-selection.ts";
 import { renderActivityGroup } from "./chat-message-group.ts";
 import {
   createAssistantMessage,
