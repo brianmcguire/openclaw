@@ -109,7 +109,7 @@ export function recordLegacyAcpMigrationSources(
 }
 
 /** The entry writer persists this projection together with its new lifecycle. */
-export function retainLegacyAcpMigrationSourcesJson(
+function retainLegacyAcpMigrationSourcesJson(
   value: string | null | undefined,
   entry: SessionEntry | undefined,
 ): string | null {
