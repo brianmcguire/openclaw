@@ -383,7 +383,8 @@ export async function readSessionManagerContextAsync<T>(
     return withSessionTranscriptReadSource(
       captured,
       consume,
-      async ({ scope, expectedIdentity, owner, assertCurrent: assertReadOwner }) => {
+      async (source) => {
+        const { scope, expectedIdentity, owner, assertCurrent: assertReadOwner } = source;
         const readTarget = {
           ...scope,
           sessionId: captured.sessionId,
