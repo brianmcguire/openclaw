@@ -76,7 +76,7 @@ export function createPreparedModelCatalogProjection(params: {
       const provider = params.normalizeProvider(outcome.provider);
       const references = configuredModels
         .filter((model) => params.normalizeProvider(model.provider) === provider)
-        .map((model) => ({ ...model, provider }));
+        .map((model) => Object.assign({}, model, { provider }));
       const match = providers.find(
         (candidate) =>
           matchesProviderPluginRef(candidate, provider) &&
