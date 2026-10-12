@@ -3,7 +3,7 @@ import {
   clawPackageRemovalResultSchema,
   type ClawPackageRemovalGateway,
 } from "../claws/package-remove-contract.js";
-import { loadConfig } from "../config/config.js";
+import { captureRuntimeConfigAsyncReader } from "../config/config.js";
 import { resolveCronJobsStorePathFromConfig } from "../cron/store.js";
 import { callGatewayFromCli } from "./gateway-rpc.js";
 
@@ -14,7 +14,9 @@ export const clawPackageRemovalGateway: ClawPackageRemovalGateway = async (reque
       { timeout: "600000" },
       {
         ...request,
-        binding: resolveClawMonitorCleanupBinding(resolveCronJobsStorePathFromConfig(loadConfig())),
+        binding: resolveClawMonitorCleanupBinding(
+          resolveCronJobsStorePathFromConfig(await captureRuntimeConfigAsyncReader()()),
+        ),
       },
     ),
   );

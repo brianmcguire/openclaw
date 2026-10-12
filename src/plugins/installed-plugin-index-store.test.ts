@@ -657,10 +657,12 @@ describe("installed plugin index install-record persistence", () => {
             expect(index).toBeNull();
           };
 
-          for (const read of order === "records-first"
-            ? [readRecords, readIndex]
-            : [readIndex, readRecords]) {
-            await read();
+          if (order === "records-first") {
+            await readRecords();
+            readIndex();
+          } else {
+            readIndex();
+            await readRecords();
           }
 
           expect(
