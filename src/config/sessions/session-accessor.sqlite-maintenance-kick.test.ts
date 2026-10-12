@@ -22,6 +22,7 @@ import {
   runOpenClawAgentWriteTransaction,
 } from "../../state/openclaw-agent-db.js";
 import { createOpenClawDatabaseMaintenanceScope } from "../../state/openclaw-state-db-async-lifecycle.js";
+import { runMaintenance } from "../../state/openclaw-state-maintenance-context.js";
 import { loadSessionEntry } from "./session-accessor.js";
 import { writeSessionEntry } from "./session-accessor.sqlite-entry-store.js";
 import { importSqliteSessionRowsBatch } from "./session-accessor.sqlite-import.js";
@@ -36,21 +37,37 @@ import {
 
 const tempDirs = useAutoCleanupTempDirTracker(afterEach);
 const sessionKey = "agent:main:age-kick";
+const maintenanceScopes: ReturnType<typeof createOpenClawDatabaseMaintenanceScope>[] = [];
 
 afterEach(async () => {
   await agentDatabase.closeOpenClawAgentDatabasesAsync();
+  for (const maintenance of maintenanceScopes.splice(0)) {
+    await maintenance.close();
+  }
   closeOpenClawAgentDatabasesForTest();
   resetGatewayWorkAdmission();
   vi.useRealTimers();
   vi.restoreAllMocks();
 });
 
-function createStore(pruneAfterMs = 1_000, key = sessionKey) {
-  // Keep the fake clock in this process without replacing admission or commit ownership.
+function createStore(pruneAfterMs = 1_000, key = sessionKey, { workerMaintenance = false } = {}) {
+  // Policy tests keep the fake clock in the native maintenance owner's process.
+  const maintenance = workerMaintenance
+    ? undefined
+    : createOpenClawDatabaseMaintenanceScope({
+        schemaMaintenance: true,
+        assertOwnerCurrent() {},
+        assertDatabaseAccess() {},
+      });
+  if (maintenance) {
+    maintenanceScopes.push(maintenance);
+  }
   const runReclamation = reclamationRun.runSqliteSessionReclamation;
   const archived = createDeferred();
   vi.spyOn(reclamationRun, "runSqliteSessionReclamation").mockImplementation((params) => {
-    const result = runReclamation({ ...params, forceInProcess: true });
+    const result = maintenance
+      ? runMaintenance(maintenance, () => runReclamation(params), false)
+      : runReclamation(params);
     // Observe publication without consuming the fault probes' original rejections.
     void result.then(
       (value) => {
@@ -103,7 +120,7 @@ function observeNextPeriodicMaintenance(delayMs = ageFacts.SESSION_ENTRY_MAINTEN
 }
 
 it("joins automatic worker maintenance while Doctor drainage waits on other work", async () => {
-  const { request } = createStore();
+  const { request } = createStore(1_000, sessionKey, { workerMaintenance: true });
   const maintenance = createOpenClawDatabaseMaintenanceScope({
     schemaMaintenance: true,
     assertOwnerCurrent() {},

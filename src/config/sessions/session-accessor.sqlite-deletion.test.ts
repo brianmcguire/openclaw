@@ -12,6 +12,7 @@ import {
   observeHostDataSql,
   trackSqliteStatementExecutions,
 } from "../../../test/helpers/sqlite-statement-execution-counter.js";
+import { useSqliteWorkerFault } from "../../../test/helpers/sqlite-worker-fault.js";
 import type {
   AgentHarness,
   AgentHarnessSessionDeletionParams,
@@ -64,6 +65,19 @@ import { recordSessionParticipant } from "./session-accessor.sqlite-participants
 import { resolveSqliteScope } from "./session-accessor.sqlite-scope.js";
 import { replaceTranscriptEventsSync } from "./session-accessor.sqlite-transcript-write.test-support.js";
 import { resolveSqliteTargetFromSessionStorePath } from "./session-sqlite-target.js";
+
+const artifactDeletionFault = useSqliteWorkerFault([
+  {
+    name: "reject_artifact_delete",
+    match: /^delete from session_suggestions\b/u,
+    sql: `CREATE TEMP TRIGGER reject_artifact_delete BEFORE DELETE ON main.session_suggestions
+      BEGIN
+        SELECT CASE WHEN EXISTS (SELECT 1 FROM session_members WHERE session_key = OLD.session_key)
+          THEN RAISE(ABORT, 'membership deletion order changed')
+          ELSE RAISE(ABORT, 'injected suggestion deletion failure') END;
+      END`,
+  },
+]);
 
 const tempDirs = useSessionStoreTempDirs(afterAll, "openclaw-session-deletion-");
 
@@ -391,14 +405,7 @@ describe("session deletion and native owner state", () => {
           database.db.prepare("SELECT * FROM session_windows ORDER BY session_id").all();
         const windowsBefore = readWindows();
         if (rejectSuggestions) {
-          // The deletion worker must encounter the same failure as the fixture connection.
-          database.db
-            .exec(`CREATE TRIGGER reject_artifact_delete BEFORE DELETE ON session_suggestions
-            WHEN OLD.session_key = '${sessionKey}' BEGIN
-            SELECT CASE WHEN EXISTS (SELECT 1 FROM session_members WHERE session_key = OLD.session_key)
-              THEN RAISE(ABORT, 'membership deletion order changed')
-              ELSE RAISE(ABORT, 'injected suggestion deletion failure') END;
-            END`);
+          artifactDeletionFault.enable();
         }
         const owner = nativeOwner();
         const counter = trackSqliteStatementExecutions(database.db, ["inventory"], (sql) =>
@@ -443,6 +450,7 @@ describe("session deletion and native owner state", () => {
           const inventoryBudget = deleteWindows ? 0 : 1;
           expect.soft(counter.counts.inventory).toBeLessThanOrEqual(inventoryBudget);
         } finally {
+          artifactDeletionFault.disable();
           counter.restore();
         }
         expect(read(otherKey)).toEqual(otherBefore);
