@@ -228,7 +228,13 @@ export function inspectDatabaseWorkerCompatibility(
     if (!member) {
       member = { file: owner.file, name: operationName(node), valid: true, reviewed: false, node };
       declarations.set(node, member);
-      const name = "name" in node ? node.name : undefined;
+      const name =
+        (ts.isArrowFunction(node) || ts.isFunctionExpression(node)) &&
+        ts.isPropertyAssignment(node.parent)
+          ? node.parent.name
+          : "name" in node
+            ? node.name
+            : undefined;
       if (name) {
         declarationNames.add(name);
       }
@@ -315,9 +321,15 @@ export function inspectDatabaseWorkerCompatibility(
             (member) =>
               ts.isPropertyDeclaration(member) ||
               ts.isClassStaticBlockDeclaration(member) ||
-              ("name" in member && member.name && ts.isComputedPropertyName(member.name)) ||
-              ("modifiers" in member &&
-                member.modifiers?.some((modifier) => ts.isDecorator(modifier))),
+              ((ts.isConstructorDeclaration(member) ||
+                ts.isMethodDeclaration(member) ||
+                ts.isGetAccessorDeclaration(member) ||
+                ts.isSetAccessorDeclaration(member)) &&
+                ((!ts.isConstructorDeclaration(member) && ts.isComputedPropertyName(member.name)) ||
+                  member.modifiers?.some((modifier) => ts.isDecorator(modifier)) ||
+                  member.parameters.some((parameter) =>
+                    parameter.modifiers?.some((modifier) => ts.isDecorator(modifier)),
+                  ))),
           )
         ) {
           operation.valid = false;
@@ -339,7 +351,7 @@ export function inspectDatabaseWorkerCompatibility(
         } else {
           returned(node.body);
         }
-        node.body.forEachChild(visit);
+        visit(node.body);
       }
     }
     pending = members.filter((member) => !expandedMembers.has(member.node));

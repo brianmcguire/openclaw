@@ -339,6 +339,23 @@ it("keeps shared receiver methods live when an async factory also creates them",
   expect(result.violations).toEqual([]);
 });
 
+it.each(["() => readKernel()", "function () { return readKernel(); }"])(
+  "keeps a function-valued receiver property live when it escapes: %s",
+  (value) => {
+    const result = inspect({
+      [secondFile]: `import { readKernel } from '../session-kernel.js';
+        /** @deprecated Use workers. */
+        export function ${second}() {
+          return { read: ${value}, start() { register(this.read); } };
+        }`,
+      [kernelFile]: kernel,
+    });
+    expect(result.operations.has(kernelFile)).toBe(false);
+    expect(result.operations.has(secondFile)).toBe(false);
+    expect(result.violations).toEqual([expect.stringContaining(`${secondFile}:${second}:`)]);
+  },
+);
+
 it("keeps unregistered nondeprecated receiver factories live", () => {
   const result = inspect({
     [kernelFile]: kernel,
@@ -399,6 +416,11 @@ it.each([
   ["computed member name", "", "[readKernel()]() { return readKernel(); }"],
   ["static block", "", "static { readKernel(); } read() { return readKernel(); }"],
   ["decorated member", "", "@decorate read() { return readKernel(); }"],
+  [
+    "decorated parameter",
+    "",
+    "constructor(@decorate value: unknown) {} read() { return readKernel(); }",
+  ],
 ])("keeps deprecated classes with %s live", (_label, heritage, member) => {
   const result = inspect({
     [secondFile]: `import { readKernel } from '../session-kernel.js';
