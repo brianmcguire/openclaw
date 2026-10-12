@@ -47,6 +47,7 @@ vi.mock("../channels/plugins/index.js", () => ({
   normalizeChannelId: mocks.normalizeChannelId,
 }));
 
+// mock-isolation: Channel auth exercises fixture reads and writes without loading host credentials.
 vi.mock("../config/config.js", () => ({
   getRuntimeConfig: mocks.loadConfig,
   loadConfig: mocks.loadConfig,

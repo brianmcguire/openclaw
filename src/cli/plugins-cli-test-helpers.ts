@@ -320,6 +320,7 @@ vi.mock("../config/io.js", async (importOriginal) => {
   };
 });
 
+// mock-isolation: Plugin CLI fixtures control config writes and Nix behavior without host state.
 vi.mock("../config/config.js", () => ({
   assertConfigWriteAllowedInCurrentMode: () => {
     if (process.env.OPENCLAW_NIX_MODE === "1") {

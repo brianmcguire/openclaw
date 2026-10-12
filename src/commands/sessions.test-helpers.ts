@@ -28,6 +28,7 @@ const sessionsConfigState = vi.hoisted<{ loadConfig: () => Record<string, unknow
 
 const defaultSessionsConfigLoader = sessionsConfigState.loadConfig;
 
+// mock-isolation: Session CLI fixtures select their own stores instead of the host session config.
 vi.mock("../config/config.js", () => ({
   getRuntimeConfig: () => sessionsConfigState.loadConfig(),
   loadConfig: () => sessionsConfigState.loadConfig(),

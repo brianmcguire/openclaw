@@ -270,6 +270,7 @@ vi.mock("../secrets/provider-env-vars.js", () => ({
   }),
 }));
 
+// mock-isolation: Capability commands use fixture config and snapshot publication without host state.
 vi.mock("../config/config.js", () => ({
   getRuntimeConfigSourceSnapshot: mocks.getRuntimeConfigSourceSnapshot,
   getRuntimeConfig: mocks.loadConfig,

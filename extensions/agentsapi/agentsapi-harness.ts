@@ -67,7 +67,7 @@ export function createAgentsApiHarness(runtime: PluginRuntime): AgentHarnessV2 {
           assertCleanupCurrent();
           // Reacquire agent-scoped auth after restart without persisting credentials
           // or validating the new configuration against the session being removed.
-          const config = runtime.config.current();
+          const config = runtime.config.current({ clone: true });
           // Older hosted/external bindings have no executor metadata. The host
           // mutation target supplies their original agent, never the current default.
           const agentId = binding.executor?.agentId ?? targetAgentId;

@@ -27,6 +27,7 @@ const {
   runtimeLogs,
 } = mocks;
 
+// mock-isolation: Security command dispatch uses synthetic audit config, never host config.
 vi.mock("../config/config.js", () => ({
   getRuntimeConfig: () => mocks.loadConfig(),
   loadConfig: () => mocks.loadConfig(),

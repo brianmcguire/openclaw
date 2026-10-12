@@ -33,6 +33,7 @@ vi.doMock("../runtime.js", async () => {
     runtime,
   );
 });
+// mock-isolation: QR setup resolves fixture config and secrets without host credentials.
 vi.mock("../config/config.js", () => ({
   getRuntimeConfig: mocks.loadConfig,
   loadConfig: mocks.loadConfig,

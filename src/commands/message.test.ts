@@ -46,6 +46,7 @@ function readOnlyMessageActionCall(): RunMessageActionParams {
 
 let testConfig: Record<string, unknown> = {};
 const applyPluginAutoEnable = vi.hoisted(() => vi.fn(({ config }) => ({ config, changes: [] })));
+// mock-isolation: Message dispatch receives testConfig without reading host channel credentials.
 vi.mock("../config/config.js", () => ({
   getRuntimeConfig: () => testConfig,
   loadConfig: () => testConfig,
