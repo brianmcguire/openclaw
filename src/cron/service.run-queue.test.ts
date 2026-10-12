@@ -55,7 +55,6 @@ it("keeps owned running work out of watchdog database polling", async () => {
     defaultAgentId: "main",
     log: logger,
     enqueueSystemEvent() {},
-    requestHeartbeat() {},
     runIsolatedAgentJob: async () => ({ status: "ok" }),
     runCommandJob: async () => {
       entered.resolve();
