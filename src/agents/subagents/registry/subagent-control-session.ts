@@ -90,11 +90,21 @@ export async function prepareSubagentKillSession(
   const selected = expected?.sessionKey === sessionKey ? { ...expected } : undefined;
   const storePath = selected?.storePath ?? childOwner.storePath;
   const taskAuthority = requesterOwnedRun && resolveSubagentChildAuthority(requesterOwnedRun);
-  if (
-    requesterOwnedRun?.childSessionKey === sessionKey &&
-    taskAuthority?.status === "legacy-unverified" &&
-    taskAuthority.childAgentId === agentId
-  ) {
+  const prepareLegacySession = (
+    currentSession?: Pick<SessionEntry, "sessionId"> | null,
+  ): SubagentKillSession | undefined => {
+    if (
+      requesterOwnedRun?.childSessionKey !== sessionKey ||
+      taskAuthority?.status !== "legacy-unverified" ||
+      taskAuthority.childAgentId !== agentId
+    ) {
+      return undefined;
+    }
+    if (resolveSubagentChildAuthority(requesterOwnedRun, currentSession).status === "mismatch") {
+      throw new Error(
+        "Subagent original session incarnation is unresolved or changed; no child work was changed.",
+      );
+    }
     assertOwner();
     return {
       agentId,
@@ -104,6 +114,14 @@ export async function prepareSubagentKillSession(
       withPublication: (run) => run(),
       release: () => {},
     };
+  };
+  const legacySession = !requesterOwnedRun?.childSessionIdentity?.sessionId
+    ? prepareLegacySession()
+    : expected?.sessionId
+      ? prepareLegacySession({ sessionId: expected.sessionId })
+      : undefined;
+  if (legacySession) {
+    return legacySession;
   }
   let releaseLifetime: (() => void) | undefined;
   const release = () => {
@@ -118,6 +136,10 @@ export async function prepareSubagentKillSession(
           throw read.error;
         }
         const entry = read.value;
+        const readLegacySession = prepareLegacySession(entry ?? null);
+        if (readLegacySession) {
+          return readLegacySession;
+        }
         if (
           resolveSubagentChildAuthority(
             { childSessionKey: sessionKey, childAgentId: agentId, childSessionIdentity: original },
