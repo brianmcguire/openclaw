@@ -52,6 +52,7 @@ import {
   retainSessionActorEntryFacts,
 } from "./session-actor-replica.js";
 import { createSessionActor } from "./session-actor.js";
+import { readSessionEntryReadOnlyInWorker } from "./session-entry-read-runtime.js";
 import { mutatePendingInput, readPendingInput } from "./session-pending-input-operations.kernel.js";
 import type { PendingInputMutation } from "./session-pending-input-operations.types.js";
 import { addSessionMember } from "./session-sharing-store.native.js";
@@ -565,8 +566,8 @@ it("invalidates for native owner, replacement, transcript and deletion writers",
 });
 
 it("reuses list facts and invalidates summary watermarks after transcript writes", async () => {
-  await withReplica((fixture) => {
-    const { scope } = fixture;
+  await withReplica(async (fixture) => {
+    const { scope, replica } = fixture;
     replaceSessionEntrySync(scope, {
       sessionId: "replica-session",
       updatedAt: 1,
@@ -598,6 +599,32 @@ it("reuses list facts and invalidates summary watermarks after transcript writes
     }
     facts.entry.label = "caller edit";
     expect(readSessionActorRowFacts(target)?.entry.label).toBeUndefined();
+
+    if (before.target.database.kind !== "file") {
+      throw new Error("Replica fixture requires a durable target");
+    }
+    const entryTarget = { ...before.target, database: before.target.database };
+    const projection = {
+      hasBoard: before.hasBoard,
+      activitySummaryWatermark: before.transcript.watermark,
+    };
+    expect(readSessionActorEntryFacts(entryTarget)?.projection).toEqual(projection);
+    replica.invalidate();
+    retainSessionActorEntryFacts(
+      entryTarget,
+      {
+        entry: { ...before.entry!, skillsSnapshot: undefined },
+        snapshots: [],
+        projection,
+      },
+      "row-facts-reader",
+    );
+    expect((await readSessionEntryReadOnlyInWorker(scope))?.skillsSnapshot?.prompt).toBe(
+      "Saved instructions",
+    );
+    expect(readSessionActorRowFacts(target)?.activitySummaryWatermark).toEqual(
+      before.transcript.watermark,
+    );
 
     const appended = appendTranscriptEventSync(
       { ...scope, sessionId: "replica-session" },

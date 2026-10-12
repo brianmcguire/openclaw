@@ -327,6 +327,12 @@ export function readSessionActorEntryFacts(
     members: state.members,
     participants: state.participants,
     snapshots,
+    projection: cell.snapshot
+      ? {
+          hasBoard: cell.snapshot.hasBoard,
+          activitySummaryWatermark: cell.snapshot.transcript.watermark,
+        }
+      : cell.entry?.projection,
     dependencySessionIds: state.dependencySessionIds,
     writeToken: state.writeToken,
     predicateColumns: cell.predicateColumns,
