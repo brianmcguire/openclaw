@@ -136,7 +136,6 @@ export async function spawnSubagentDirect(
     });
     const delegatedToolPolicy = delegation.policy;
     assertDelegationCurrent = delegation.assertCurrent;
-    assertActive();
     if (reservationPending && !swarmReservation?.isCurrent()) {
       return { status: "error", error: "Collector FIFO reservation is no longer current" };
     }

@@ -242,14 +242,11 @@ export async function maybeSpawnVisibleSession(params: {
     completionOwnerKey: params.options?.completionOwnerKey,
   });
   let assertDelegationCurrent: (() => void) | undefined = undefined;
-  const assertActive = composeSessionSourceAssertion(
-    [params.options?.assertActive],
-    (assertSource) => {
-      assertSource();
-      params.options?.signal?.throwIfAborted();
-      assertDelegationCurrent?.();
-    },
-  );
+  const assertActive = composeSessionSourceAssertion([params.options?.assertActive], (source) => {
+    source();
+    params.options?.signal?.throwIfAborted();
+    assertDelegationCurrent?.();
+  });
   const requesterTarget = await resolveGatewaySessionStoreTargetInWorker({
     cfg,
     key: ownership.completionRequesterSessionKey,
@@ -391,7 +388,6 @@ export async function maybeSpawnVisibleSession(params: {
           resolveRequesterPreferences({ cfg, requesterAgentId, requesterEntry }).model)
         : undefined,
   });
-  assertActive();
   if (modelPlan.status === "error") {
     return { status: "error", error: modelPlan.error };
   }
@@ -407,7 +403,6 @@ export async function maybeSpawnVisibleSession(params: {
           hasFallbackOrigin: initialSessionPatch.modelOverrideFallbackOriginModel !== undefined,
         }
       : undefined;
-  assertActive();
   const reservation = reserveChildAdmissionSlot({
     controllerSessionKey: requesterKey,
     resolveAdmission,
