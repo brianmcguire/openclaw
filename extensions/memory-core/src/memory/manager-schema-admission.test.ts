@@ -4,6 +4,7 @@ import path from "node:path";
 import {
   openOpenClawAgentDatabase,
   resolveOpenClawAgentSqlitePath,
+  tableExists,
 } from "openclaw/plugin-sdk/sqlite-runtime";
 import { observeHostDataSql } from "openclaw/plugin-sdk/sqlite-runtime-testing";
 import { describe, expect, it } from "vitest";
@@ -72,33 +73,49 @@ describe("memory index schema admission", () => {
     }
   });
 
-  it("admits the published and shadow schemas without caller-thread schema SQL", async () => {
-    const cfg = fixture.createConfig({ provider: "none", vectorEnabled: false });
-    // Agent boot admission is separate from the memory manager's runtime admission.
-    openOpenClawAgentDatabase({ agentId: "main" });
-    const schemaSql: string[] = [];
-    const observed = observeHostDataSql((sql) => {
-      if (new Error().stack?.includes("/memory-schema")) {
-        schemaSql.push(sql);
-      }
-    });
-    try {
-      const manager = await fixture.getFreshManager(cfg, "cli");
-      expect.soft(schemaSql.splice(0), "published admission").toEqual([]);
-      await manager.sync({ reason: "test", force: true });
-      expect.soft(schemaSql.splice(0), "shadow admission").toEqual([]);
-      expect(manager.status()).toMatchObject({
-        files: 1,
-        fts: { available: true },
-        custom: { indexIdentity: { status: "valid" } },
+  it.each([false, true])(
+    "admits published and shadow schemas off-thread (vectors: %s)",
+    async (vectorEnabled) => {
+      const cfg = fixture.createConfig({
+        provider: vectorEnabled ? "openai" : "none",
+        vectorEnabled,
       });
-      expect(await manager.search("Zebra")).toEqual([
-        expect.objectContaining({ path: "memory/2026-01-12.md" }),
-      ]);
-    } finally {
-      observed.restore();
-    }
-  });
+      // Agent boot admission is separate from the memory manager's runtime admission.
+      openOpenClawAgentDatabase({ agentId: "main" });
+      const schemaSql: string[] = [];
+      const observed = observeHostDataSql((sql) => {
+        if (
+          /sqlite_(?:schema|master)|pragma_(?:table|index|foreign_key)|\bPRAGMA\s+(?:encoding|user_version|schema_version|integrity_check|quick_check|foreign_key_check|table_info|table_xinfo|index_list|index_info|index_xinfo)\b|\bFROM\s+"?schema_meta\b/iu.test(
+            sql,
+          )
+        ) {
+          schemaSql.push(sql);
+        }
+      });
+      try {
+        const manager = await fixture.getFreshManager(cfg, "cli");
+        expect.soft(schemaSql.splice(0), "published admission").toEqual([]);
+        await manager.sync({ reason: "test", force: true });
+        expect.soft(schemaSql.splice(0), "shadow admission").toEqual([]);
+        expect(manager.status()).toMatchObject({
+          files: 1,
+          fts: { available: true },
+          custom: { indexIdentity: { status: "valid" } },
+        });
+        if (vectorEnabled) {
+          const { db } = openOpenClawAgentDatabase({ agentId: "main" });
+          expect(tableExists(db, "memory_index_chunks_vec")).toBe(true);
+          expect.soft(schemaSql.splice(0), "vector schema publication").toEqual([]);
+        }
+        expect(await manager.search("Zebra")).toEqual([
+          expect.objectContaining({ path: "memory/2026-01-12.md" }),
+        ]);
+        expect.soft(schemaSql, "search after vector publication").toEqual([]);
+      } finally {
+        observed.restore();
+      }
+    },
+  );
 
   it("refuses real schema drift when reopening a memory manager", async () => {
     const cfg = fixture.createConfig({ provider: "none", vectorEnabled: false });
