@@ -26,15 +26,7 @@ const reviewed = new Map([
     {
       priority: 3,
       evidence:
-        "Worker-backed bundled callers; deprecated 2026.9.8 synchronous Mention Inbox SDK kernel until next SDK major",
-    },
-  ],
-  [
-    "src/gateway/mention-inbox.native.ts",
-    {
-      priority: 3,
-      evidence:
-        "Deprecated 2026.9.8 synchronous Mention Inbox SDK transaction; removal at next SDK major",
+        "Mention Inbox SQL runs only in mention-inbox.worker.ts after removal of the deprecated synchronous receiver",
     },
   ],
   [
@@ -46,7 +38,7 @@ const reviewed = new Map([
     {
       priority: 1,
       evidence:
-        "Bundled execution guards consume committed policy receipts; deprecated synchronous SDK readers and native approval compatibility retain shared row kernels",
+        "Bundled execution guards consume committed policy receipts; retained synchronous SDK readers and policy Doctor retain shared row kernels",
     },
   ],
   [
@@ -662,6 +654,23 @@ const reviewedOperations = new Map([
     ],
   ],
   [
+    "src/gateway/mention-inbox-store.ts",
+    [
+      {
+        tier: "W",
+        operations: [
+          "readMentionStoreHead",
+          "readMentionStoreSnapshot",
+          "writeMentionStoreChanges",
+          "writeMentionStoreChanges.writeValue",
+          "writeMentionStoreChanges.flushDeletes",
+        ],
+        evidence:
+          "Only mention-inbox.worker.ts invokes the SQL kernels after deletion of mention-inbox.native.ts. Host imports consume constants, types, and the SQL-free admitted-head getter.",
+      },
+    ],
+  ],
+  [
     "src/gateway/operator-approval-store.kernel.ts",
     [
       {
@@ -672,9 +681,13 @@ const reviewedOperations = new Map([
       },
       {
         tier: "W",
-        operations: ["insertOperatorApprovalInDatabase", "listPendingOperatorApprovalsInDatabase"],
+        operations: [
+          "insertOperatorApprovalInDatabase",
+          "getOperatorApprovalDetailedInDatabase",
+          "listPendingOperatorApprovalsInDatabase",
+        ],
         evidence:
-          "exec-approval-manager.ts:125 insert and operator-approval-session-events.ts:194 pending supply no native guard; operator-approval-store.ts:138,173 selects worker dispatch to operator-approval-store.operations.ts:57,65 via state/openclaw-state-worker-registry.ts:119. Other approval operations retain native compatibility.",
+          "operator-approval-store.ts dispatches all runtime mutations through the shared-state writer registry; the opaque-guard native adapter is removed. History reads use openclaw-state-read.worker.ts.",
       },
     ],
   ],
@@ -685,16 +698,18 @@ const reviewedOperations = new Map([
         tier: "T2",
         operations: ["closeOrphanedOperatorApprovals", "pruneTerminalOperatorApprovals"],
         evidence:
-          "Boot calls only in server-aux-handlers.ts:105,109; remaining transitions retain native SDK compatibility",
+          "Boot admission alone closes orphaned approvals and prunes terminal rows; runtime transitions dispatch through the shared-state writer.",
       },
       {
         tier: "W",
         operations: [
+          "resolveOperatorApprovalInDatabase",
+          "forceDenyOperatorApprovalInDatabase",
           "expireDueOperatorApprovalsInDatabase",
           "consumeOperatorApprovalAllowOnceInDatabase",
         ],
         evidence:
-          "operator-approval-session-events.ts:178 expiry and exec-approval-manager.ts:644 consume supply no native guard; operator-approval-store.ts:173 -> operator-approval-store.operations.ts:85,89 worker dispatch. Expiry also runs from worker-only pending kernel at operator-approval-store.kernel.ts:233.",
+          "Only operator-approval-store.operations.ts invokes runtime transitions through the shared-state writer registry after removal of operator-approval-store.native.ts. Boot close/prune retain their separate T2 operations.",
       },
     ],
   ],
@@ -706,6 +721,7 @@ const reviewedOperations = new Map([
         operations: [
           "selectRow",
           "write",
+          "find",
           "list",
           "register",
           "bind",
@@ -713,7 +729,7 @@ const reviewedOperations = new Map([
           "retire",
         ],
         evidence:
-          "List/mutations run only in node-worker-journal.worker.ts:14,19,26,31,36; selectRow/write are mutation-only helpers; native findSync at node-worker-prepared-workspace-store.ts:31 reaches only find, which stays T1",
+          "All workspace journal operations run only in node-worker-journal.worker.ts after removal of the synchronous node workspace acquisition and findSync receiver.",
       },
     ],
   ],
@@ -1168,9 +1184,15 @@ const reviewedOperations = new Map([
     [
       {
         tier: "W",
-        operations: ["hasApprovalLocatorNamespaceConflict"],
+        operations: [
+          "selectOperatorApprovalRow",
+          "selectOperatorApprovalRowByLocator",
+          "hasApprovalLocatorNamespaceConflict",
+          "denyCorruptPendingRow",
+          "expirePendingRow",
+        ],
         evidence:
-          "Only operator-approval-store.kernel.ts:98 insert calls it. Sole facade caller exec-approval-manager.ts:125 passes assertCurrent but no native guard, so operator-approval-store.ts:173 dispatches the registered worker operation.",
+          "Approval row kernels are reached only by worker-dispatched insert/get/pending/resolve/deny/consume operations. Boot close/prune query their own rows and do not invoke these helpers.",
       },
     ],
   ],
@@ -1724,9 +1746,9 @@ const reviewedOperations = new Map([
     [
       {
         tier: "W",
-        operations: ["deleteExecApprovalsConfigRow"],
+        operations: ["deleteExecApprovalsConfigRow", "mintMcpToolGrantLocked"],
         evidence:
-          "exec-approvals-mutation.worker.ts restores an absent policy row through the shared-state writer.",
+          "exec-approvals-mutation.worker.ts restores an absent policy row. Only operator-approval-store.transitions.ts resolves and mints MCP grants, now exclusively through operator-approval-store.operations.ts in the shared-state writer.",
       },
     ],
   ],
@@ -2148,9 +2170,14 @@ const reviewedOperations = new Map([
     [
       {
         tier: "W",
-        operations: ["connectUserModelAccount"],
+        operations: [
+          "connectUserModelAccount",
+          "listUserModelAccounts",
+          "setUserProfileAuthLink",
+          "clearUserProfileAuthLink",
+        ],
         evidence:
-          "Personal sign-in persistence executes only through userProfiles.modelAccount.connect in user-profiles.worker.ts. Inventory/link/unlink kernels retain T1 for deprecated v2026.9.8 Gateway SDK methods; bundled callers use the Async replacements. Shared credential/OAuth kernels and the live account pin guard also retain T1.",
+          "Sign-in, inventory, link, and unlink execute only through user-profiles.worker.ts after deletion of the synchronous model-account Gateway methods. Shared credential/OAuth/link-reader kernels and the live account pin guard retain T1.",
       },
       {
         tier: "T3",
@@ -2283,6 +2310,7 @@ const reviewedOperations = new Map([
   ],
 ]);
 const workerModules = new Set([
+  "src/gateway/operator-approval-store.operations.ts", // Only openclaw-state-worker-registry.ts imports its runtime map; host worker-contract import is type-only.
   "src/config/sessions/session-accessor.sqlite-worktree-owner.ts", // Only session-entry-read.worker.ts reads the worktree projection after owner-protection's worker cutover.
   "src/gateway/worker-environments/placement-move-intent.ts", // Move reads and mutations run only in placement lifecycle, turn-claim, and projection workers.
   "src/state/user-background.store.ts", // Background read/write workers; preference validation and profile merge/link/GitHub-sync also run in shared-state workers.
@@ -2752,7 +2780,7 @@ function render(rows) {
     "",
     "Reviewed mixed modules classify calls by their named lexical operation path, optionally narrowed to a variable initializer or an exact synchronous guard. These qualifiers exclude nested function bodies, and a guard applies only to its then-branch, so unrelated sites remain conservative even when source lines move. Other file tiers retain the broadest applicable counted exposure, including explicit worker/maintenance mixtures. Each file has at most one row per tier; tier file counts overlap, while total files and call expressions are unique. These are not measured runtime call counts. Recheck the operation and all registered callers before changing its classification. Maintenance invoked by Gateway timers remains T1. Prepared results never confer current authority; follow [worker access](/reference/database-schemas/worker-access).",
     "",
-    "Canonical-repair mutations and exact-row readers retain T2 for native Doctor callers; Gateway legacy-main detection compares entries and transcript content in the existing session reader worker. Full generation and node-artifact custody fingerprints remain Doctor-only. Shared cleanup kernels retain T1 where released opaque SDK callbacks require native transactions; initialization rollback uses the worker's commit finalizer. Synchronous lifecycle and final-effect authority checks remain native residuals. Incognito category reads and native approval SDK compatibility retain their existing classifications. Claw provenance's counted writes are CLI-only; its raw Gateway reads remain runtime debt outside the five-primitive scan. Likewise, worker-only direct Cron receipt calls do not classify the host current-authority reads they transitively expose. Reclassification corrects metadata; it does not move runtime SQL or demonstrate a speedup.",
+    "Canonical-repair mutations and exact-row readers retain T2 for native Doctor callers; Gateway legacy-main detection compares entries and transcript content in the existing session reader worker. Full generation and node-artifact custody fingerprints remain Doctor-only. Shared cleanup kernels retain T1 where retained opaque SDK callbacks require native transactions; initialization rollback uses the worker's commit finalizer. Synchronous lifecycle and final-effect authority checks remain native residuals. Incognito category reads retain their existing classifications. Approval mutations run in the shared-state worker after removal of the opaque native approval adapter. Claw provenance's counted writes are CLI-only; its raw Gateway reads remain runtime debt outside the five-primitive scan. Likewise, worker-only direct Cron receipt calls do not classify the host current-authority reads they transitively expose. Reclassification corrects metadata; it does not move runtime SQL or demonstrate a speedup.",
     "",
     "The scan covers JavaScript/TypeScript files under `src/`, `extensions/`, `packages/`, and `scripts/` as selected by `rg` (respecting ignore rules). It recognizes direct calls, property calls with these names, and named-import aliases. It does not resolve higher-order aliases, dynamic dispatch, transitive wrappers, direct `DatabaseSync` methods, other query primitives, or native-language SQLite. It is a reproducible migration queue, not a complete prohibition checker. Tests are deliberately excluded rather than counted as T3.",
     "",
@@ -2775,7 +2803,7 @@ function render(rows) {
     "",
     "| Priority | Entry point / owner | Status to verify before a lane |",
     "| --- | --- | --- |",
-    "| 1 | `ensureProfileForEmail`; `updateExecApprovals` | Exec policy mutations use the shared-state writer; final SDK authority reads and opaque approval-commit kernels retain their native contract. Profile creation is a separate owner. The 47% is shared, not a measurement of either method alone. |",
+    "| 1 | `ensureProfileForEmail`; `updateExecApprovals` | Exec policy mutations use the shared-state writer; retained final SDK authority reads keep their native contract. Profile creation is a separate owner. The 47% is shared, not a measurement of either method alone. |",
     "| 2 | `sessions.list` → `listProjectedSessions` → resident session row projection | Warm requests already reuse resident rows with no host Kysely reads. Hydration, dirty/archived rows, and membership reads remain migration debt; preserve identity-keyed reuse and projection revisions. |",
     "| 3 | `chat.history` → history worker | Ordinary durable pages already use the worker. This cutover moves raw cursor delta reads and JSON parsing through the same owner; display/profile projection, byte budgets, and fresh sharing checks stay on the host. |",
     "| 4 | Transcript search → `session-transcript-search.ts` | The async facade moves durable FTS reads through the existing worker lifecycle for the runtime callers: `sessions-read.ts`, `sessions-search-projected.ts`, and `embedded-gateway-stub.ts`. Callers recheck current scope and authorization after awaiting. |",

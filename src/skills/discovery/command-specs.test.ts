@@ -1,7 +1,6 @@
 // Command spec tests cover skill-provided command metadata and filtering.
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createFixtureSkillEntry } from "../test-support/test-helpers.js";
-import type { SkillEntry } from "../types.js";
 
 const bundleCommandState = vi.hoisted(() => ({
   entries: [] as Array<{
@@ -26,14 +25,6 @@ vi.mock("../../plugins/bundle-commands.js", () => ({
   loadEnabledClaudeBundleCommands: () => bundleCommandState.entries,
 }));
 
-vi.mock("../loading/workspace-skill-loader.js", () => ({
-  loadVisibleSkills: () => [],
-}));
-
-vi.mock("../loading/workspace-skill-filter.js", () => ({
-  filterSkillEntries: (entries: SkillEntry[]) => entries,
-}));
-
 beforeEach(() => {
   vi.resetModules();
   bundleCommandState.entries = [];
@@ -45,41 +36,37 @@ afterEach(() => {
   bundleCommandState.entries = [];
 });
 
-describe("buildWorkspaceSkillCommandSpecs", () => {
+describe("assembleWorkspaceSkillCommandSpecs", () => {
   it("uses shared user-invocable skill exposure policy", async () => {
-    const { buildWorkspaceSkillCommandSpecs } = await import("./command-specs.js");
-    const specs = buildWorkspaceSkillCommandSpecs("/workspace", {
-      entries: [
-        createFixtureSkillEntry("visible"),
-        createFixtureSkillEntry("hidden-by-exposure", {
-          exposure: {
-            includeInRuntimeRegistry: true,
-            includeInAvailableSkillsPrompt: true,
-            userInvocable: false,
-          },
-        }),
-        createFixtureSkillEntry("hidden-by-invocation", {
-          invocation: {
-            userInvocable: false,
-            disableModelInvocation: false,
-          },
-        }),
-      ],
-    });
+    const { assembleWorkspaceSkillCommandSpecs } = await import("./command-specs.js");
+    const specs = assembleWorkspaceSkillCommandSpecs("/workspace", [
+      createFixtureSkillEntry("visible"),
+      createFixtureSkillEntry("hidden-by-exposure", {
+        exposure: {
+          includeInRuntimeRegistry: true,
+          includeInAvailableSkillsPrompt: true,
+          userInvocable: false,
+        },
+      }),
+      createFixtureSkillEntry("hidden-by-invocation", {
+        invocation: {
+          userInvocable: false,
+          disableModelInvocation: false,
+        },
+      }),
+    ]);
 
     expect(specs.map((spec) => spec.skillName)).toEqual(["visible"]);
   });
 
   it("preserves workspace skill descriptions for provider-specific limits", async () => {
-    const { buildWorkspaceSkillCommandSpecs } = await import("./command-specs.js");
+    const { assembleWorkspaceSkillCommandSpecs } = await import("./command-specs.js");
     const prefix = "a".repeat(98);
     const entry = createFixtureSkillEntry("emoji-skill");
     entry.skill.displayName = "Emoji Skill";
     entry.skill.description = `${prefix}😀 extra text beyond the limit`;
 
-    const specs = buildWorkspaceSkillCommandSpecs("/workspace", {
-      entries: [entry],
-    });
+    const specs = assembleWorkspaceSkillCommandSpecs("/workspace", [entry]);
 
     expect(specs[0]?.displayName).toBe("Emoji Skill");
     expect(specs[0]?.description).toBe(entry.skill.description);
@@ -88,7 +75,7 @@ describe("buildWorkspaceSkillCommandSpecs", () => {
   });
 
   it("preserves bundle command descriptions for provider-specific limits", async () => {
-    const { buildWorkspaceSkillCommandSpecs } = await import("./command-specs.js");
+    const { assembleWorkspaceSkillCommandSpecs } = await import("./command-specs.js");
     const prefix = "a".repeat(98);
     const description = `${prefix}😀 extra text beyond the limit`;
     bundleCommandState.entries = [
@@ -101,9 +88,7 @@ describe("buildWorkspaceSkillCommandSpecs", () => {
       },
     ];
 
-    const specs = buildWorkspaceSkillCommandSpecs("/workspace", {
-      entries: [],
-    });
+    const specs = assembleWorkspaceSkillCommandSpecs("/workspace", []);
 
     expect(specs[0]).toMatchObject({
       skillName: "bundle-emoji",
@@ -113,7 +98,7 @@ describe("buildWorkspaceSkillCommandSpecs", () => {
   });
 
   it("bounds the skill command debug cache and re-logs evicted keys", async () => {
-    const { buildWorkspaceSkillCommandSpecs } = await import("./command-specs.js");
+    const { assembleWorkspaceSkillCommandSpecs } = await import("./command-specs.js");
     const entries = [];
     for (let index = 0; index < 1025; index += 1) {
       entries.push({
@@ -126,11 +111,11 @@ describe("buildWorkspaceSkillCommandSpecs", () => {
     }
 
     bundleCommandState.entries = entries;
-    buildWorkspaceSkillCommandSpecs("/workspace", { entries: [] });
+    assembleWorkspaceSkillCommandSpecs("/workspace", []);
     expect(skillsLoggerMock.debug).toHaveBeenCalledTimes(1025);
 
     bundleCommandState.entries = [entries[0]!];
-    buildWorkspaceSkillCommandSpecs("/workspace", { entries: [] });
+    assembleWorkspaceSkillCommandSpecs("/workspace", []);
     expect(skillsLoggerMock.debug).toHaveBeenCalledTimes(1026);
   });
 });

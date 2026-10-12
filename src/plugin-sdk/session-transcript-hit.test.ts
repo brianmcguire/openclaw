@@ -5,50 +5,38 @@ import {
   extractTranscriptIdentityFromSessionsMemoryHit,
   extractTranscriptStemFromSessionsMemoryHit,
   formatSessionTranscriptMemoryHitKey,
-  loadCombinedSessionStoreForGateway,
   loadCombinedSessionStoreForGatewayAsync,
   parseSessionTranscriptMemoryHitKey,
   resolveSessionTranscriptMemoryHitKeyToSessionKeys,
   resolveTranscriptStemToSessionKeys,
 } from "./session-transcript-hit.js";
 
-const { loadGatewaySessionStore, loadGatewaySessionStoreAsync } = vi.hoisted(() => ({
-  loadGatewaySessionStore: vi.fn(),
+const { loadGatewaySessionStoreAsync } = vi.hoisted(() => ({
   loadGatewaySessionStoreAsync: vi.fn(),
-}));
-vi.mock("../config/sessions/combined-store-gateway.js", () => ({
-  loadCombinedSessionStoreForGatewayCore: loadGatewaySessionStore,
 }));
 // mock-isolation: SDK projection tests supply synthetic snapshots without loading database owners.
 vi.mock("../config/sessions/combined-store-gateway-read.js", () => ({
   loadCombinedSessionStoreForGatewayCoreAsync: loadGatewaySessionStoreAsync,
 }));
 
-it.each([
-  ["synchronous compatibility", loadCombinedSessionStoreForGateway],
-  ["async", loadCombinedSessionStoreForGatewayAsync],
-] as const)(
-  "filters incognito rows from the %s plugin cross-session view",
-  async (_label, load) => {
-    const snapshot = {
-      storePath: "(multiple)",
-      store: {
-        "agent:main:dashboard:visible": { sessionId: "visible", updatedAt: 1 },
-        "agent:main:dashboard:incognito-private": {
-          incognito: true,
-          sessionId: "private",
-          updatedAt: 2,
-        },
-      },
-    };
-    loadGatewaySessionStore.mockReturnValue(snapshot);
-    loadGatewaySessionStoreAsync.mockResolvedValue(snapshot);
-
-    expect((await load({})).store).toEqual({
+it("filters incognito rows from the plugin cross-session view", async () => {
+  const snapshot = {
+    storePath: "(multiple)",
+    store: {
       "agent:main:dashboard:visible": { sessionId: "visible", updatedAt: 1 },
-    });
-  },
-);
+      "agent:main:dashboard:incognito-private": {
+        incognito: true,
+        sessionId: "private",
+        updatedAt: 2,
+      },
+    },
+  };
+  loadGatewaySessionStoreAsync.mockResolvedValue(snapshot);
+
+  expect((await loadCombinedSessionStoreForGatewayAsync({})).store).toEqual({
+    "agent:main:dashboard:visible": { sessionId: "visible", updatedAt: 1 },
+  });
+});
 
 describe("extractTranscriptIdentityFromSessionsMemoryHit", () => {
   it("extracts builtin live and archived transcript identities", () => {

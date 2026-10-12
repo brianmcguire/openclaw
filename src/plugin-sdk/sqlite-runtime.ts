@@ -49,19 +49,9 @@ export {
 } from "../infra/sqlite-snapshot-source.js";
 export { assertTransactionUsable } from "../infra/sqlite-transaction.js";
 export {
-  borrowOpenClawAgentDatabase,
   executeSqliteQuerySync,
-  executeSqliteQueryTakeFirstSync,
   getNodeSqliteKysely,
-  iterateSqliteQuerySync,
   openNodeSqliteDatabase,
-  openOpenClawAgentDatabase,
-  prepareSqliteQuerySync,
-  runOpenClawAgentWriteAdmission,
-  runSqliteImmediateTransaction,
   runSqliteImmediateTransactionSync,
-  withOpenClawAgentDatabaseAsync,
-  withOpenClawAgentDatabaseRuntime,
-  withOpenClawAgentDatabaseWrite,
 } from "./sqlite-runtime-legacy.js";
 export { tableExists } from "../state/openclaw-state-db-schema-helpers.js";

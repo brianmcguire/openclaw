@@ -1,10 +1,9 @@
 import path from "node:path";
 import { normalizeOptionalString } from "../../packages/normalization-core/src/string-coerce.js";
 import { parseUsageCountedSessionIdFromFileName } from "../config/sessions/artifacts.js";
-import { loadCombinedSessionStoreForGatewayCore as loadGatewaySessionStore } from "../config/sessions/combined-store-gateway.js";
+import type { loadCombinedSessionStoreForGatewayCoreAsync } from "../config/sessions/combined-store-gateway-read.js";
 import type { SessionEntry } from "../config/sessions/types.js";
 import type { OpenClawConfig } from "../config/types.openclaw.js";
-import { warnPluginSdkDeprecation } from "../plugins/sdk-deprecation.js";
 import { isIncognitoSessionKey, normalizeAgentId } from "../routing/session-key.js";
 export {
   formatSessionTranscriptMemoryHitKey,
@@ -19,27 +18,6 @@ export type {
   SessionTranscriptMemoryHitKeyParams,
   SessionTranscriptReadParams,
 } from "./session-transcript-memory-hit.js";
-
-/** @deprecated Await loadCombinedSessionStoreForGatewayAsync. Removal: next Plugin SDK major. */
-export function loadCombinedSessionStoreForGateway(
-  cfg: OpenClawConfig,
-  opts: { agentId?: string; configuredAgentsOnly?: boolean } = {},
-) {
-  warnPluginSdkDeprecation({
-    family: "session-transcript-store",
-    method: "loadCombinedSessionStoreForGateway",
-    replacement: "loadCombinedSessionStoreForGatewayAsync",
-    compatibility: "The synchronous loader retains its complete session-entry return value.",
-  });
-  // This published view has no projection option; installed plugins receive complete entries.
-  return publicSessionStore(
-    loadGatewaySessionStore(cfg, {
-      ...opts,
-      includeIncognito: false,
-      projection: "full",
-    }),
-  );
-}
 
 /** Loads the complete cross-session plugin view through the existing database worker. */
 export async function loadCombinedSessionStoreForGatewayAsync(
@@ -57,7 +35,9 @@ export async function loadCombinedSessionStoreForGatewayAsync(
   );
 }
 
-function publicSessionStore(result: ReturnType<typeof loadGatewaySessionStore>) {
+function publicSessionStore(
+  result: Awaited<ReturnType<typeof loadCombinedSessionStoreForGatewayCoreAsync>>,
+) {
   return {
     storePath: result.storePath,
     // Plugin search hits can be re-persisted into durable transcripts, so the

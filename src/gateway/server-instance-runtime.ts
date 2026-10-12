@@ -13,7 +13,6 @@ import type {
 } from "../infra/approval-gateway-runtime.types.js";
 import { createApprovalNativeRouteCoordinator } from "../infra/approval-native-route-coordinator.js";
 import type { ChannelApprovalKind } from "../infra/approval-types.js";
-import { warnPluginSdkDeprecation } from "../plugins/sdk-deprecation.js";
 import { createLazyRuntimeModule } from "../shared/lazy-runtime.js";
 // HTTP agent ingress can finish before the lazy agent.wait handler loads its recorder.
 import "./agent-turn/agent-job.js";
@@ -406,7 +405,6 @@ export function createGatewayInstanceRuntime(
   const publish = (
     kind: ChannelApprovalKind,
     callback: (subscriber: GatewayApprovalEventSubscriber) => void,
-    shouldDeliver?: (subscriber: GatewayApprovalEventSubscriber) => boolean,
   ): number => {
     if (closed) {
       return 0;
@@ -417,9 +415,6 @@ export function createGatewayInstanceRuntime(
         continue;
       }
       try {
-        if (shouldDeliver && !shouldDeliver(subscriber)) {
-          continue;
-        }
         callback(subscriber);
         delivered += 1;
       } catch (error) {
@@ -432,49 +427,6 @@ export function createGatewayInstanceRuntime(
   return {
     createAgentTurnFacade,
     approvalEvents: {
-      publishRequested: (kind, request) => {
-        warnPluginSdkDeprecation({
-          family: "approval-event-publication",
-          method: "approvalEvents.publishRequested",
-          replacement: "await approvalEvents.publishRequestedAsync",
-          compatibility: "Synchronous subscribers retain immediate delivery and numeric counts.",
-        });
-        if (closed) {
-          return 0;
-        }
-        // SAFETY: Gateway publishers pass the canonical normalized approval request union.
-        const approvalRequest = request as GatewayApprovalRequest;
-        const eligible = new Set<GatewayApprovalEventSubscriber>();
-        for (const subscriber of Array.from(approvalSubscribers)) {
-          if (!subscriber.eventKinds.has(kind)) {
-            continue;
-          }
-          let accepted: boolean | Promise<boolean>;
-          try {
-            accepted = subscriber.shouldHandle(approvalRequest);
-          } catch (error) {
-            options.logError?.(`internal approval subscriber failed: ${String(error)}`);
-            continue;
-          }
-          if (typeof accepted !== "boolean") {
-            // Observe started preparation even though this publication cannot await it.
-            void accepted.catch((error: unknown) => {
-              options.logError?.(`internal approval subscriber failed: ${String(error)}`);
-            });
-            throw new Error(
-              "Approval eligibility requires async preparation; use approvalEvents.publishRequestedAsync.",
-            );
-          }
-          if (accepted) {
-            eligible.add(subscriber);
-          }
-        }
-        return publish(
-          kind,
-          (subscriber) => subscriber.onRequested(approvalRequest),
-          (subscriber) => eligible.has(subscriber),
-        );
-      },
       publishRequestedAsync: (kind, request) =>
         publishRequestedAsync(kind, request as GatewayApprovalRequest),
       publishResolved: (kind, resolved) => {

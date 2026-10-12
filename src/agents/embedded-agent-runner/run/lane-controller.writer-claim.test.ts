@@ -105,7 +105,7 @@ describe("embedded run durable writer admission", () => {
       sessionKey,
       storePath: fixture.storePath(),
     };
-    const staleManager = SessionManager.open(staleManagerTarget, "/tmp");
+    const staleManager = await SessionManager.openAsync(staleManagerTarget, "/tmp");
     let supersededOutcome: AgentRunTerminalOutcome | undefined;
     const unsubscribe = onAgentEvent((event) => {
       if (event.runId === "run-a" && event.stream === "lifecycle" && event.data.phase === "end") {
@@ -181,8 +181,8 @@ describe("embedded run durable writer admission", () => {
       expectedLifecycleRevision: lifecycleRevision,
       expectedWriterRunId: "run-b",
     });
-    expect(() =>
-      staleManager.appendMessage(
+    await expect(
+      staleManager.appendMessageAsync(
         buildAssistantMessage({
           model: { api: "openai-responses", provider: "openai", id: "gpt-test" },
           content: [{ type: "text", text: "late model output" }],
@@ -190,7 +190,7 @@ describe("embedded run durable writer admission", () => {
           usage: buildUsageWithNoCost({}),
         }),
       ),
-    ).toThrow(SessionTranscriptWriterClaimReboundError);
+    ).rejects.toThrow(SessionTranscriptWriterClaimReboundError);
 
     const staleAppend = await appendExactAssistantMessageToSessionTranscript({
       agentId: "main",
@@ -246,7 +246,7 @@ describe("embedded run durable writer admission", () => {
       sessionKey,
       storePath: fixture.storePath(),
     };
-    const staleManager = SessionManager.open(staleManagerTarget, "/tmp");
+    const staleManager = await SessionManager.openAsync(staleManagerTarget, "/tmp");
 
     try {
       await claimAgentSessionWriter({
@@ -268,8 +268,8 @@ describe("embedded run durable writer admission", () => {
     expect(
       loadSessionEntry({ agentId: "main", sessionKey, storePath: fixture.storePath() }),
     ).toMatchObject({ activeWriterRunId: "run-next" });
-    expect(() =>
-      staleManager.appendMessage(
+    await expect(
+      staleManager.appendMessageAsync(
         buildAssistantMessage({
           model: { api: "openai-responses", provider: "openai", id: "gpt-test" },
           content: [{ type: "text", text: "late model output" }],
@@ -277,7 +277,7 @@ describe("embedded run durable writer admission", () => {
           usage: buildUsageWithNoCost({}),
         }),
       ),
-    ).toThrow(SessionTranscriptWriterClaimReboundError);
+    ).rejects.toThrow(SessionTranscriptWriterClaimReboundError);
 
     const staleAppend = await appendExactAssistantMessageToSessionTranscript({
       agentId: "main",

@@ -2,11 +2,11 @@ import { sameSessionTranscriptTargetBinding } from "../../../config/sessions/tra
 import { withSessionTranscriptWriteAssertion } from "../../../config/sessions/transcript-write-context.js";
 import { withSessionManagerWriteAssertion } from "../session-manager-write-admission.js";
 import type { SessionManager } from "../session-manager.js";
-import type { ExtensionActions, ExtensionActionsV2, ExtensionRuntime } from "./types.js";
+import type { ExtensionActionsV2, ExtensionRuntimeV2 } from "./types.js";
 
 function bindPersistenceScope(
   manager: Pick<SessionManager, "getSessionTarget">,
-  runtime: ExtensionRuntime,
+  runtime: ExtensionRuntimeV2,
 ) {
   return <T>(action: () => Promise<T>): Promise<T> => {
     runtime.assertActive();
@@ -27,8 +27,8 @@ function bindPersistenceScope(
 /** Retain the bound runtime and manager through queued metadata transaction/commit grants. */
 export function bindExtensionMetadataActions(
   manager: Pick<SessionManager, "getSessionTarget">,
-  runtime: ExtensionRuntime,
-  actions: Pick<ExtensionActions, "setModel" | "setThinkingLevel">,
+  runtime: ExtensionRuntimeV2,
+  actions: Pick<ExtensionActionsV2, "setModel" | "setThinkingLevel">,
 ): void {
   const run = bindPersistenceScope(manager, runtime);
   runtime.setModel = (model) => run(() => actions.setModel(model));
@@ -38,7 +38,7 @@ export function bindExtensionMetadataActions(
 /** Bind awaited writes to the same runtime and transcript target through worker commit. */
 export function bindExtensionPersistenceActions(
   manager: Pick<SessionManager, "getSessionTarget">,
-  runtime: ExtensionRuntime,
+  runtime: ExtensionRuntimeV2,
   actions: ExtensionActionsV2,
 ): void {
   const run = bindPersistenceScope(manager, runtime);

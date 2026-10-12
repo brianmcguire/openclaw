@@ -47,7 +47,6 @@ vi.mock("../agents/auth-profiles.js", () => ({
   externalCliDiscoveryForProviderAuth: () => ({ mode: "scoped", allowKeychainPrompt: false }),
   ensureAuthProfileStore: vi.fn(() => ({ version: 1, profiles: {} })),
   listProfilesForProvider: vi.fn(() => []),
-  upsertAuthProfile: vi.fn(),
 }));
 
 const resolveEnvApiKey = vi.hoisted(() =>

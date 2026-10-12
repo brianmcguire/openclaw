@@ -358,7 +358,6 @@ vi.mock("../../sessions/stored-model-overrides.js", () => {
     },
   );
   return {
-    resolveStoredModelOverride,
     resolveStoredModelOverrideAsync: async (
       params: Parameters<typeof resolveStoredModelOverride>[0],
     ) => resolveStoredModelOverride(params),

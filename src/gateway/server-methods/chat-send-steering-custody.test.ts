@@ -297,7 +297,7 @@ describe("steering input custody", () => {
           }
         }
         operation.setPhase("running");
-        const sessionManager = SessionManager.open(
+        const sessionManager = await SessionManager.openAsync(
           fixture.scope,
           path.dirname(fixture.scope.storePath),
         );
@@ -598,7 +598,7 @@ describe("steering input custody", () => {
           hasAvatar: false,
           updatedAt: profile.updatedAt,
         };
-        const sessionManager = SessionManager.open(
+        const sessionManager = await SessionManager.openAsync(
           fixture.scope,
           path.dirname(fixture.scope.storePath),
         );

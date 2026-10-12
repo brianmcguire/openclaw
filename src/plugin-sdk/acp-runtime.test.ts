@@ -36,8 +36,8 @@ const event = {
   shouldRouteToOriginating: false,
   originatingChannel: undefined,
   originatingTo: undefined,
-  shouldSendToolSummaries: true,
-  shouldSendFullToolDetails: false,
+  shouldSendToolSummariesAsync: async () => true,
+  shouldSendFullToolDetailsAsync: async () => false,
   sendPolicy: "allow" as const,
 };
 
@@ -153,43 +153,7 @@ describe("tryDispatchAcpReplyHook", () => {
     });
   });
 
-  it("passes a live tool-summary predicate through to ACP runtime", async () => {
-    bypassMock.mockResolvedValue(false);
-    dispatchMock.mockResolvedValue({
-      queuedFinal: false,
-      counts: { tool: 0, block: 0, final: 0 },
-    });
-    let shouldSendToolSummaries = true;
-    let fullToolDetails = false;
-    const eventWithGetter = {
-      ...event,
-      get shouldSendToolSummaries() {
-        return shouldSendToolSummaries;
-      },
-      get shouldSendFullToolDetails() {
-        return fullToolDetails;
-      },
-    };
-
-    await tryDispatchAcpReplyHook(eventWithGetter, ctx);
-
-    const [payload] = dispatchMock.mock.calls[0] ?? [];
-    const livePredicate = (payload as { shouldSendToolSummaries: () => Promise<boolean> })
-      .shouldSendToolSummaries;
-    expect(livePredicate).toBeTypeOf("function");
-    expect(await livePredicate()).toBe(true);
-
-    shouldSendToolSummaries = false;
-    expect(await livePredicate()).toBe(false);
-    fullToolDetails = true;
-    expect(
-      await (
-        payload as { shouldSendFullToolDetails: () => Promise<boolean> }
-      ).shouldSendFullToolDetails(),
-    ).toBe(false);
-  });
-
-  it("uses awaited visibility without touching deprecated event getters", async () => {
+  it("passes live awaited visibility to ACP runtime", async () => {
     bypassMock.mockResolvedValue(false);
     let summaries = false;
     dispatchMock.mockImplementationOnce(async (params) => {
@@ -202,12 +166,6 @@ describe("tryDispatchAcpReplyHook", () => {
     await tryDispatchAcpReplyHook(
       {
         ...event,
-        get shouldSendToolSummaries(): boolean {
-          throw new Error("deprecated synchronous read");
-        },
-        get shouldSendFullToolDetails(): boolean {
-          throw new Error("deprecated synchronous read");
-        },
         shouldSendToolSummariesAsync: async () => summaries,
         shouldSendFullToolDetailsAsync: async () => true,
       },

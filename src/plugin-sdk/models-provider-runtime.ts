@@ -11,7 +11,6 @@ export {
   getModelsRuntimeChoices,
 } from "../auto-reply/reply/commands-models-catalog.js";
 export {
-  formatModelsAvailableHeader,
   formatModelsAvailableHeaderAsync,
   MODEL_PICKER_CHANGED_MESSAGE,
   resolveModelsCommandReply,

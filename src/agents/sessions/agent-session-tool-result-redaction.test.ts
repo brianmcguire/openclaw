@@ -58,9 +58,9 @@ afterEach(resetSecretRedactionRegistryForTest);
 afterEach(resetLogger);
 
 describe("AgentSession model-visible tool-result redaction", () => {
-  it.each(["sync", "async"] as const)(
+  it.each(["async"] as const)(
     "reprojects %s tool text after commit when settlement registers a new secret",
-    async (mode) => {
+    async () => {
       const cwd = tempDirs.make("openclaw-post-commit-redaction-");
       const scope = {
         agentId: "main",
@@ -87,12 +87,10 @@ describe("AgentSession model-visible tool-result redaction", () => {
             id: "settled-lookup",
             name: "lookup",
             arguments: {},
-            ...(mode === "async" ? { async: true as const } : {}),
+            async: true as const,
           };
-          const message = createAssistant(model, [toolCall], mode === "async" ? "stop" : "toolUse");
-          if (mode === "sync") {
-            return createAssistantResultStream(message);
-          }
+          const message = createAssistant(model, [toolCall], "stop");
+
           const response = createAssistantMessageEventStream();
           response.push({ type: "start", partial: createAssistant(model, []) });
           response.push({ type: "toolcall_end", contentIndex: 0, toolCall, partial: message });
@@ -227,7 +225,7 @@ describe("AgentSession model-visible tool-result redaction", () => {
       const rawText = `${rawValue} ${benignText}`;
       const maskedText = `${maskedValue} ${benignText}`;
       await upsertSessionEntryCore(scope, { sessionId: scope.sessionId, updatedAt: 1 });
-      const manager = guardSessionManager(SessionManager.open(scope, cwd), {
+      const manager = guardSessionManager(await SessionManager.openAsync(scope, cwd), {
         config,
         contextWindowTokens: 32_768,
       });
@@ -333,7 +331,7 @@ describe("AgentSession model-visible tool-result redaction", () => {
         session.dispose();
         const databasePath = resolveSqliteTargetFromSessionStorePath(scope.storePath).path;
         expect(await closeOpenClawAgentDatabaseByPathAsync(databasePath)).toBe(true);
-        const reopened = SessionManager.open(scope, cwd);
+        const reopened = await SessionManager.openAsync(scope, cwd);
         const { session: restored } = await createTestSession({
           sessionManager: guardSessionManager(reopened, { config }),
           customTools,

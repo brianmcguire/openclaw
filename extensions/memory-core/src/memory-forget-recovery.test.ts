@@ -8,8 +8,10 @@ import {
   ensureMemoryIndexSchema,
   loadSqliteVecExtension,
 } from "openclaw/plugin-sdk/memory-core-host-engine-storage";
-import { openOpenClawAgentDatabase } from "openclaw/plugin-sdk/sqlite-runtime";
-import { openOpenClawStateDatabase } from "openclaw/plugin-sdk/sqlite-runtime-testing";
+import {
+  openOpenClawStateDatabase,
+  openOpenClawAgentDatabase,
+} from "openclaw/plugin-sdk/sqlite-runtime-testing";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   readSessionIngestionState,

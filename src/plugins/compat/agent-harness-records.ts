@@ -15,11 +15,7 @@ const AGENT_HARNESS_TOOL_CONSTRUCTION_COMPAT_RECORD = {
   diagnostics: [
     "TypeScript @deprecated annotations and migration documentation; no runtime warnings",
   ],
-  tests: [
-    "src/plugin-sdk/agent-harness-async-compat.test.ts",
-    "src/agents/harness/host-capability.test.ts",
-    "src/plugins/compat/registry.test.ts",
-  ],
+  tests: ["src/agents/harness/host-capability.test.ts", "src/plugins/compat/registry.test.ts"],
   releaseNote:
     "Harness tool construction exposes awaited factories that read fresh exec policy through the existing worker and preserve live host authority. Synchronous SDK factories remain compatible; stored data and update behavior are unchanged.",
 } as const satisfies PluginCompatRecord;

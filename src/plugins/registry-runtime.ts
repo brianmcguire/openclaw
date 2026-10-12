@@ -567,9 +567,6 @@ export function createPluginRuntimeResolver(state: PluginRegistryState) {
           const overrides = {
             resolveThinkingDefault: (params: Parameters<typeof agent.resolveThinkingDefault>[0]) =>
               invokeSelectedRuntime(() => agent.resolveThinkingDefault(params)),
-            resolveCliBackendDispatchEligibility: (
-              params: Parameters<typeof agent.resolveCliBackendDispatchEligibility>[0],
-            ) => invokeSelectedRuntime(() => agent.resolveCliBackendDispatchEligibility(params)),
             resolveCliBackendDispatchEligibilityAsync: (
               params: Parameters<typeof agent.resolveCliBackendDispatchEligibilityAsync>[0],
             ) =>

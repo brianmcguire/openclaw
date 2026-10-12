@@ -12,7 +12,6 @@ import {
 } from "../state/openclaw-state-worker-store.js";
 import {
   upsertSessionUpstreamLinkInDatabase,
-  deleteSessionUpstreamLinkInDatabase,
   type SessionUpstreamLink,
   type SessionUpstreamLinkInput,
 } from "./session-upstream-links.kernel.js";
@@ -43,30 +42,6 @@ export function upsertSessionUpstreamLink(
     }
     log.warn(`failed to upsert session upstream link: ${String(error)}`);
     return false;
-  }
-}
-
-/** @deprecated Use deleteSessionUpstreamLinkAsync. Removed at the next Plugin SDK major. */
-export function deleteSessionUpstreamLink(
-  sessionKey: string,
-  agentId: string,
-  options: OpenClawStateDatabaseOptions & {
-    expected?: SessionUpstreamLink;
-    assertCommitAllowed?: () => void;
-  } = {},
-): "deleted" | "absent" | "changed" | undefined {
-  try {
-    return runOpenClawStateWriteTransaction(({ db }) => {
-      options.assertCommitAllowed?.();
-      return deleteSessionUpstreamLinkInDatabase(db, sessionKey, agentId, options.expected);
-    }, options);
-  } catch (error) {
-    // Exact creation compensation must report an unverified cleanup, not claim success.
-    if (options.expected) {
-      throw error;
-    }
-    log.warn(`failed to delete session upstream link: ${String(error)}`);
-    return undefined;
   }
 }
 
@@ -133,7 +108,7 @@ export async function deleteSessionUpstreamLinkAsync(
     expected?: SessionUpstreamLink;
     assertCommitAllowed?: () => void;
   } = {},
-): Promise<ReturnType<typeof deleteSessionUpstreamLink>> {
+): Promise<"deleted" | "absent" | "changed" | undefined> {
   try {
     const context = captureOpenClawStateWorkerContext(options);
     const input = structuredClone({ sessionKey, agentId, expected: options.expected });

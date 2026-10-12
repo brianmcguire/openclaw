@@ -30,7 +30,6 @@ const storeSourceCallNames = new Set([
 ]);
 const allowedResolverCallNames = new Set([
   "resolveEffectiveAllowFromLists",
-  "resolveDmGroupAccessWithLists",
   "resolveMattermostEffectiveAllowFromLists",
   "resolveIrcEffectiveAllowlists",
 ]);
@@ -172,7 +171,7 @@ async function main() {
     console.error(`- ${violation.path}:${violation.line} (${violation.reason})`);
   }
   console.error(
-    "Group auth must be composed via shared resolvers (resolveDmGroupAccessWithLists / resolveEffectiveAllowFromLists).",
+    "Group auth must be composed via shared resolvers (resolveDmGroupAccessWithListsAsync / resolveEffectiveAllowFromLists).",
   );
   process.exit(1);
 }

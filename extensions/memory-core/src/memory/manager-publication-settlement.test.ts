@@ -5,12 +5,12 @@ import { mock } from "node:test";
 import { Worker } from "node:worker_threads";
 import { ensureMemoryIndexSchema } from "openclaw/plugin-sdk/memory-core-host-engine-storage";
 import { resolveRuntimeWorkerUrl } from "openclaw/plugin-sdk/process-runtime";
+import { openOpenClawAgentSqliteWorkerStore } from "openclaw/plugin-sdk/sqlite-runtime";
 import {
+  closeOpenClawAgentDatabasesAsync,
   openOpenClawAgentDatabase,
-  openOpenClawAgentSqliteWorkerStore,
   withOpenClawAgentDatabaseWrite,
-} from "openclaw/plugin-sdk/sqlite-runtime";
-import { closeOpenClawAgentDatabasesAsync } from "openclaw/plugin-sdk/sqlite-runtime-testing";
+} from "openclaw/plugin-sdk/sqlite-runtime-testing";
 import { awaitGateBeforeSettlement, withinTest } from "openclaw/plugin-sdk/test-fixtures";
 import { createOpenClawTestState } from "openclaw/plugin-sdk/test-state";
 import { expect, it } from "vitest";

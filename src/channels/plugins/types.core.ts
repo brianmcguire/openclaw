@@ -435,6 +435,33 @@ export type ChannelThreadingToolContext = {
   skipCrossContextDecoration?: boolean;
 };
 
+/** Resolve ownership from binding facts already prepared by the channel. */
+export type ChannelConversationRouteOwnerResolver = (params: {
+  cfg: OpenClawConfig;
+  accountId: string;
+  conversation: {
+    kind: ChatType;
+    peerId: string;
+    /** Canonical delivery target when it differs from the routing peer. */
+    target?: string;
+    threadId?: string;
+    nativeChannelId?: string;
+    context?: {
+      parentPeerId?: string;
+      guildId?: string;
+      teamId?: string;
+      memberRoleIds?: string[];
+    };
+  };
+}) =>
+  // `undefined` delegates to core, `null` denies ownership, and `unavailable`
+  // preserves temporary owner-store outages as retryable delivery failures.
+  | { kind: "agent"; agentId: string }
+  | { kind: "plugin"; pluginId: string; fallbackAgentId: string }
+  | { kind: "unavailable" }
+  | null
+  | undefined;
+
 /** Channel-owned messaging helpers for target parsing, routing, and payload shaping. */
 export type ChannelMessagingAdapter = {
   /**
@@ -443,48 +470,13 @@ export type ChannelMessagingAdapter = {
    * targets before plugin-specific normalization.
    */
   targetPrefixes?: readonly string[];
-  /** @deprecated Use prepareConversationRouteOwnersAsync for worker-backed route ownership. */
-  resolveConversationRouteOwner?: (params: {
-    cfg: OpenClawConfig;
-    accountId: string;
-    conversation: {
-      kind: ChatType;
-      peerId: string;
-      /** Canonical delivery target when it differs from the routing peer. */
-      target?: string;
-      threadId?: string;
-      nativeChannelId?: string;
-      context?: {
-        parentPeerId?: string;
-        guildId?: string;
-        teamId?: string;
-        memberRoleIds?: string[];
-      };
-    };
-  }) =>
-    // `undefined` delegates to core, `null` denies ownership, and `unavailable`
-    // preserves temporary owner-store outages as retryable delivery failures.
-    | { kind: "agent"; agentId: string }
-    | { kind: "plugin"; pluginId: string; fallbackAgentId: string }
-    | { kind: "unavailable" }
-    | null
-    | undefined;
-  /** @deprecated Use prepareConversationRouteOwnersAsync for worker-backed route ownership. */
-  prepareConversationRouteOwners?: (
-    params: readonly Parameters<
-      NonNullable<ChannelMessagingAdapter["resolveConversationRouteOwner"]>
-    >[0][],
-    inspectBindings: (refs: readonly ConversationRef[]) => readonly SessionBindingInspection[],
-  ) => readonly NonNullable<ChannelMessagingAdapter["resolveConversationRouteOwner"]>[];
   /** Prepare binding facts in workers; returned resolvers run under the current effect grant. */
   prepareConversationRouteOwnersAsync?: (
-    params: readonly Parameters<
-      NonNullable<ChannelMessagingAdapter["resolveConversationRouteOwner"]>
-    >[0][],
+    params: readonly Parameters<ChannelConversationRouteOwnerResolver>[0][],
     inspectBindings: (
       refs: readonly ConversationRef[],
     ) => Promise<() => readonly SessionBindingInspection[]>,
-  ) => Promise<readonly NonNullable<ChannelMessagingAdapter["resolveConversationRouteOwner"]>[]>;
+  ) => Promise<readonly ChannelConversationRouteOwnerResolver[]>;
   /** DM targets rebuilt from session keys require an explicit `user:` kind prefix. */
   directTargetStyle?: "user-prefixed";
   /** Equality rule for ids carried by prefixed outbound targets. */

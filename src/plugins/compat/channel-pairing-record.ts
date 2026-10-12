@@ -15,11 +15,7 @@ export const CHANNEL_PAIRING_COMPAT_RECORD = {
   diagnostics: [
     "TypeScript @deprecated annotation and migration documentation; no runtime warnings",
   ],
-  tests: [
-    "src/plugins/compat/registry.test.ts",
-    "src/plugin-sdk/channel-pairing-allowlist.test.ts",
-    "src/pairing/pairing-allowlist.worker.test.ts",
-  ],
+  tests: ["src/plugins/compat/registry.test.ts", "src/pairing/pairing-allowlist.worker.test.ts"],
   releaseNote:
     "Channel ingress reads pairing allowlists through the shared-state reader. Bundled callers await the existing async API; the synchronous SDK reader remains compatible. Missing-store reads grant no permission and no longer initialize storage.",
 } as const satisfies PluginCompatRecord;

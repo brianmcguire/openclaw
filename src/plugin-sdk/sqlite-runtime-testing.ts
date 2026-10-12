@@ -27,6 +27,7 @@ export { createTrajectoryRuntimeRecorder as createTrajectoryRuntimeRecorderForTe
 export { exportTrajectoryBundle as exportTrajectoryBundleForTest } from "../trajectory/export.js";
 export { type TrajectoryEvent as SqliteTrajectoryRuntimeEventForTest } from "../trajectory/types.js";
 export {
+  borrowOpenClawAgentDatabase,
   closeOpenClawAgentDatabasesAsync,
   closeOpenClawAgentDatabasesForTest,
   openOpenClawAgentDatabase,
@@ -47,3 +48,6 @@ export {
   withIncognitoSessionBinding,
 } from "../config/sessions/session-incognito-binding.js";
 export { openIncognitoTestActor } from "../state/openclaw-agent-execution-incognito.test-support.js";
+
+export { withOpenClawAgentDatabaseWrite } from "../state/openclaw-agent-db-write.js";
+export { runOpenClawAgentWriteAdmission } from "../state/openclaw-agent-write-admission.js";

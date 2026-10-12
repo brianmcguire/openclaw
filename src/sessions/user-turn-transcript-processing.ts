@@ -1,29 +1,16 @@
 import type { Result } from "@openclaw/normalization-core/result";
 import type { AgentRunTerminalOutcome } from "../agents/agent-run-terminal-outcome.types.js";
 import type { SessionPendingInputReceipt } from "../config/sessions/session-accessor.pending-inputs.js";
-import { warnPluginSdkDeprecation } from "../plugins/sdk-deprecation.js";
 import type { UserTurnTranscriptRecorder } from "./user-turn-transcript.types.js";
 
-/** Adapt the released synchronous callback only when no async companion is provided. */
 export async function completeUserTurnProcessing(
   recorder: UserTurnTranscriptRecorder | undefined,
   outcome: AgentRunTerminalOutcome,
 ): Promise<AgentRunTerminalOutcome | undefined> {
-  if (recorder?.completeProcessingAsync) {
-    return await recorder.completeProcessingAsync(outcome);
-  }
-  if (recorder?.completeProcessing) {
-    warnPluginSdkDeprecation({
-      family: "session-input-completion",
-      method: "UserTurnTranscriptRecorder.completeProcessing",
-      replacement: "completeProcessingAsync",
-    });
-    return recorder.completeProcessing(outcome);
-  }
-  return undefined;
+  return await recorder?.completeProcessingAsync?.(outcome);
 }
 
-/** The recorder owns one completion attempt, including its failure and native settlement. */
+/** The recorder owns one completion attempt, including its failure and worker settlement. */
 export function createUserTurnProcessingCompletion(
   readPendingInput: () => SessionPendingInputReceipt | undefined,
   sources: readonly UserTurnTranscriptRecorder[] | undefined,
@@ -49,31 +36,6 @@ export function createUserTurnProcessingCompletion(
     },
     getProcessingCompletion: () =>
       processingCompletion?.ok ? processingCompletion.value : readPendingInput()?.completion,
-    completeProcessing: (outcome: AgentRunTerminalOutcome) => {
-      warnPluginSdkDeprecation({
-        family: "session-input-completion",
-        method: "UserTurnTranscriptRecorder.completeProcessing",
-        replacement: "completeProcessingAsync",
-      });
-      const pendingInput = readPendingInput();
-      if (!pendingInput?.complete) {
-        return undefined;
-      }
-      if (!processingCompletion) {
-        if (processingCompletionPromise) {
-          throw new Error("Input completion is pending; await completeProcessingAsync");
-        }
-        try {
-          processingCompletion = { ok: true, value: pendingInput.complete(outcome) };
-        } catch (error) {
-          processingCompletion = { ok: false, error };
-        }
-      }
-      if (!processingCompletion.ok) {
-        throw processingCompletion.error;
-      }
-      return processingCompletion.value;
-    },
     completeProcessingAsync: (outcome: AgentRunTerminalOutcome) => {
       const pendingInput = readPendingInput();
       if (processingCompletionPromise) {

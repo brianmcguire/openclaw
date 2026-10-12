@@ -9,7 +9,7 @@ import { createCopilotToolBridge, makeInvocation, runSdkTool } from "./tool-brid
 
 const mocks = vi.hoisted(() => ({ publicFactory: vi.fn(() => []) }));
 vi.mock("openclaw/plugin-sdk/agent-harness", () => ({
-  createOpenClawCodingTools: mocks.publicFactory,
+  createOpenClawCodingToolsAsync: mocks.publicFactory,
 }));
 
 afterEach(() => vi.clearAllMocks());

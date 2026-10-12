@@ -3,7 +3,7 @@ import { createDeferred } from "openclaw/plugin-sdk/extension-shared";
 import { requireNodeSqlite } from "openclaw/plugin-sdk/memory-core-host-engine-storage";
 import { resolveRuntimeWorkerUrl } from "openclaw/plugin-sdk/process-runtime";
 import { upsertSessionEntry } from "openclaw/plugin-sdk/session-store-runtime";
-import { withSessionTranscriptWriteLock } from "openclaw/plugin-sdk/session-transcript-runtime";
+import { withSessionTranscriptWrite } from "openclaw/plugin-sdk/session-transcript-runtime";
 import * as sqliteRuntime from "openclaw/plugin-sdk/sqlite-runtime";
 import { vi } from "vitest";
 import { memoryCpuProcessEntrypoints } from "./manager-cpu-entrypoints.js";
@@ -95,7 +95,7 @@ export async function reservePublishedWriter(mutate?: () => void | Promise<void>
   });
   const entered = createDeferred<void>();
   const released = createDeferred<void>();
-  const done = withSessionTranscriptWriteLock(target, async () => {
+  const done = withSessionTranscriptWrite(target, async () => {
     entered.resolve();
     await released.promise;
     await mutate?.();

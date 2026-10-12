@@ -147,7 +147,9 @@ it.for([
         lifecycleRevision: "foreground-lifecycle",
         activeWriterRunId: "foreground-writer",
       });
-      const firstEntryId = SessionManager.open(target, state.workspaceDir).appendMessage({
+      const firstEntryId = await (
+        await SessionManager.openAsync(target, state.workspaceDir)
+      ).appendMessageAsync({
         role: "user",
         content: "Preserve this conversation.",
         timestamp: 1,
@@ -241,7 +243,7 @@ it.for([
               maintenanceFinished.resolve();
               return { changed: false, bytesFreed: 0, rewrittenEntries: 0 };
             },
-            compact(params) {
+            async compact(params) {
               if (deferred) {
                 throw new Error("Expected deferred maintenance");
               }
@@ -253,9 +255,9 @@ it.for([
               selectedRegistry = getPluginRuntimeGatewayRequestScope();
               if (factory !== "none") {
                 entered.resolve();
-                return Promise.resolve({ ok: true, compacted: false });
+                return { ok: true, compacted: false };
               }
-              const manager = SessionManager.open(target, state.workspaceDir);
+              const manager = await SessionManager.openAsync(target, state.workspaceDir);
               const compact = async () => {
                 entered.resolve();
                 await resume.promise;
@@ -263,7 +265,7 @@ it.for([
                   workSignal?.throwIfAborted();
                 }
                 try {
-                  manager.appendCompaction("Late summary", firstEntryId, 100);
+                  await manager.appendCompactionAsync("Late summary", firstEntryId, 100);
                 } catch {
                   lateWriteBlocked = true;
                 }
@@ -273,9 +275,7 @@ it.for([
               const pending = mode === "success-tail" ? trackAsyncWork(compact) : compact();
               work.push(pending);
               void pending.catch(() => {});
-              return mode === "success-tail"
-                ? Promise.resolve({ ok: true, compacted: false })
-                : pending;
+              return mode === "success-tail" ? { ok: true, compacted: false } : pending;
             },
             async dispose() {
               disposalCalls++;

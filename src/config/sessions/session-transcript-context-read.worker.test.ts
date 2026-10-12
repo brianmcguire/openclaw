@@ -271,8 +271,8 @@ it("refuses a rewrite after final worker validation but before host consumption"
       storePath: state.statePath("transcript.sqlite"),
     };
     await upsertSessionEntryCore(scope, { sessionId: scope.sessionId, updatedAt: 1 });
-    const source = SessionManager.open(scope);
-    source.appendMessage({ role: "user", content: "original", timestamp: 1 });
+    const source = await SessionManager.openAsync(scope);
+    await source.appendMessageAsync({ role: "user", content: "original", timestamp: 1 });
     const rewritten = createDeferred();
     const createReaders = transcriptReaders.createPreparedSessionTranscriptReads;
     const spy = vi
@@ -284,7 +284,9 @@ it("refuses a rewrite after final worker validation but before host consumption"
           readAnchors: async (input, signal) => {
             const facts = await readers.readAnchors(input, signal);
             if (input.selection.contextValidation) {
-              expect(source.removeTrailingEntries((entry) => entry.type === "message")).toBe(1);
+              expect(
+                await source.removeTrailingEntriesAsync((entry) => entry.type === "message"),
+              ).toBe(1);
               rewritten.resolve();
             }
             return facts;

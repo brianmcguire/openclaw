@@ -2,7 +2,10 @@ import { normalizeAccountId } from "openclaw/plugin-sdk/account-id";
 import type { OpenClawConfig } from "openclaw/plugin-sdk/config-contracts";
 import type { ConversationBindingInspection } from "openclaw/plugin-sdk/conversation-binding-inspection-runtime";
 import { resolveThreadBindingSpawnPolicy } from "openclaw/plugin-sdk/conversation-runtime";
-import type { ChannelMessagingAdapter } from "openclaw/plugin-sdk/core";
+import type {
+  ChannelConversationRouteOwnerResolver,
+  ChannelMessagingAdapter,
+} from "openclaw/plugin-sdk/core";
 import { listDiscordAccountIds, resolveDiscordAccountConfig } from "./accounts.js";
 import { resolveDiscordRuntimeBindingConversationId } from "./conversation-identity.js";
 import { resolveDiscordConversationBindingRoute } from "./monitor/conversation-binding-route.js";
@@ -101,9 +104,7 @@ function prepareDiscordConversationRouteOwner(params: {
 }
 
 export async function prepareDiscordConversationRouteOwnersAsync(
-  inputs: readonly Parameters<
-    NonNullable<ChannelMessagingAdapter["resolveConversationRouteOwner"]>
-  >[0][],
+  inputs: readonly Parameters<ChannelConversationRouteOwnerResolver>[0][],
   inspectBindings: Parameters<
     NonNullable<ChannelMessagingAdapter["prepareConversationRouteOwnersAsync"]>
   >[1],

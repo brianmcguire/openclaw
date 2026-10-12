@@ -6,15 +6,13 @@ import {
 } from "../plugins/capability-provider-runtime.js";
 import { createLegacyPluginSdkProviderProjection } from "../plugins/legacy-sdk-provider-projection.js";
 import { getLegacyPluginSdkResourceHost } from "../plugins/legacy-sdk-resource-host.js";
-import { warnPluginSdkDeprecation } from "../plugins/sdk-deprecation.js";
 import { parseTtsDirectives } from "./directives.js";
 import { createSpeechProviderRegistry } from "./provider-registry-core.js";
 import { canonicalizeSpeechProviderId, getSpeechProvider } from "./provider-registry.js";
 import type { TtsDirectiveOverrides, TtsDirectiveParseResult } from "./provider-types.js";
-import { resolveTtsProvider, resolveTtsProviderAsync } from "./tts-provider-resolution.js";
+import { resolveTtsProviderAsync } from "./tts-provider-resolution.js";
 import {
   resolveTtsConfig,
-  resolveTtsPrefsPath,
   resolveTtsPrefsPathAsync,
   resolveTtsRuntimeConfig,
 } from "./tts-settings.js";
@@ -91,24 +89,6 @@ function prepareExplicitTtsOverrides(params: ExplicitTtsOverrideParams) {
     accountId: params.accountId,
   });
   return { cfg, providerInput, modelId, voiceId, config };
-}
-
-/** @deprecated Use resolveExplicitTtsOverridesAsync. Removed at the next Plugin SDK major. */
-export function resolveExplicitTtsOverrides(
-  params: ExplicitTtsOverrideParams,
-): TtsDirectiveOverrides {
-  warnPluginSdkDeprecation({
-    family: "tts",
-    method: "resolveExplicitTtsOverrides",
-    replacement: "resolveExplicitTtsOverridesAsync",
-  });
-  const prepared = prepareExplicitTtsOverrides(params);
-  const { cfg, providerInput, modelId, voiceId, config } = prepared;
-  const prefsPath = params.prefsPath ?? resolveTtsPrefsPath(config);
-  const selectedProvider =
-    canonicalizeSpeechProviderId(providerInput, cfg) ??
-    (modelId || voiceId ? resolveTtsProvider(config, prefsPath) : undefined);
-  return resolveExplicitTtsOverridesForProvider(prepared, selectedProvider);
 }
 
 export async function resolveExplicitTtsOverridesAsync(

@@ -6,16 +6,11 @@ import type {
   MentionsListResult,
 } from "../../packages/gateway-protocol/src/index.js";
 import type { OpenClawConfig } from "../config/types.openclaw.js";
-import { deferSqlitePostCommitPublication } from "../infra/sqlite-post-commit.js";
 import { createSubsystemLogger } from "../logging/subsystem.js";
-import { warnMentionInboxDeprecation } from "../plugins/compat/mention-inbox-deprecation.js";
 import { onSessionIdentityMutation } from "../sessions/session-lifecycle-events.js";
 import { sessionChanges } from "../sessions/session-row-changes.js";
 import { AsyncWorkScope } from "../shared/async-work-scope.js";
-import {
-  openClawStateDatabaseCache,
-  registerOpenClawStateDatabaseAsyncResource,
-} from "../state/openclaw-state-db-cache.js";
+import { registerOpenClawStateDatabaseAsyncResource } from "../state/openclaw-state-db-cache.js";
 import { captureOpenClawStateWorkerContext } from "../state/openclaw-state-worker-context.js";
 import { onUserProfilesChanged, readUserProfileVersion } from "../state/user-profile-events.js";
 import { readGatewayAccessRevision } from "./gateway-access-revision.js";
@@ -38,7 +33,6 @@ import {
 import { createMentionInputRecorder } from "./mention-inbox-recording.js";
 import { MAX_MENTION_SOURCES } from "./mention-inbox-store.js";
 import { readMentionSnapshot, commitMentionChanges } from "./mention-inbox-worker.js";
-import { mutateNativeMentionSnapshot } from "./mention-inbox.native.js";
 import type {
   MentionCommittedInput,
   MentionInbox,
@@ -64,7 +58,6 @@ export function createMentionInbox(params: MentionInboxOptions): MentionInbox {
   let tail: Promise<void> = Promise.resolve();
   let closing = false;
   let needsSynchronization = true;
-  let nativeRevision = 0;
   let sessionRevision = 0;
   const views = new WeakMap<GatewayClient, { signature: string; revision: number }>();
   const connectedTargets: SharingTargets = new Map();
@@ -110,23 +103,17 @@ export function createMentionInbox(params: MentionInboxOptions): MentionInbox {
   }
 
   async function synchronize(): Promise<boolean> {
-    for (;;) {
-      context.admission.assertCurrent();
-      const revision = nativeRevision;
-      const snapshot = await readMentionSnapshot(
-        context,
-        needsSynchronization ? -1 : state.head.revision,
-      );
-      context.admission.assertCurrent();
-      if (revision !== nativeRevision) {
-        continue;
-      }
-      if (snapshot) {
-        state = createMentionProjection(snapshot);
-      }
-      needsSynchronization = false;
-      return Boolean(snapshot);
+    context.admission.assertCurrent();
+    const snapshot = await readMentionSnapshot(
+      context,
+      needsSynchronization ? -1 : state.head.revision,
+    );
+    context.admission.assertCurrent();
+    if (snapshot) {
+      state = createMentionProjection(snapshot);
     }
+    needsSynchronization = false;
+    return Boolean(snapshot);
   }
 
   async function mutate<T>(
@@ -140,7 +127,6 @@ export function createMentionInbox(params: MentionInboxOptions): MentionInbox {
     try {
       await synchronize();
       for (;;) {
-        const revision = nativeRevision;
         const expectedHead = { ...state.head };
         const now = scheduler.now();
         const maintenance =
@@ -193,20 +179,12 @@ export function createMentionInbox(params: MentionInboxOptions): MentionInbox {
         );
         if (receipt.kind === "conflict") {
           context.admission.assertCurrent();
-          if (revision === nativeRevision) {
-            state = createMentionProjection(receipt.snapshot);
-          } else {
-            await synchronize();
-          }
+          state = createMentionProjection(receipt.snapshot);
           continue;
         }
         context.admission.assertCurrent();
-        if (revision === nativeRevision) {
-          state = prepared.publish(receipt.head);
-          needsSynchronization = false;
-        } else {
-          await synchronize();
-        }
+        state = prepared.publish(receipt.head);
+        needsSynchronization = false;
         return result;
       }
     } catch (error) {
@@ -433,62 +411,6 @@ export function createMentionInbox(params: MentionInboxOptions): MentionInbox {
     return mentionInboxUnavailable();
   }
 
-  function mutateNative(apply: (draft: InboxState) => void, notify?: () => void): InboxState {
-    nativeRevision++;
-    needsSynchronization = true;
-    return mutateNativeMentionSnapshot(context, {
-      now: scheduler.now,
-      canonicalProfileId: (id) => policy.readProfile(id)?.profileId ?? id,
-      apply: (current) => {
-        assertActive();
-        apply(current);
-      },
-      publish: (current) => {
-        if (!scheduler.signal.aborted && current.head.revision >= state.head.revision) {
-          state = current;
-          needsSynchronization = false;
-        }
-      },
-      notify: () => {
-        if (!scheduler.signal.aborted) {
-          refreshConnectedViews();
-          scheduleExpiry();
-          notify?.();
-        }
-      },
-    });
-  }
-
-  function legacy(
-    client: GatewayClient | null,
-    ids?: readonly string[],
-  ): Result<MentionsListResult, ErrorShape> {
-    warnMentionInboxDeprecation(ids ? "dismiss" : "list");
-    return readOperation(() => {
-      const draft = mutateNative((current) => {
-        if (ids) {
-          dismissItems(current, client, ids);
-        }
-      });
-      return readView(client, params.getRuntimeConfig(), true, new Map(), draft);
-    });
-  }
-
-  function invalidate(sessionKey?: string): void {
-    warnMentionInboxDeprecation("invalidate");
-    invalidateTargets(sessionKey);
-    policy.invalidateDirectory();
-    if (closing || scheduler.signal.aborted) {
-      return;
-    }
-    try {
-      mutateNative(() => {});
-    } catch {
-      log.warn("Unable to refresh the mention Inbox; current reads will retry.");
-      scheduleExpiry(60_000);
-    }
-  }
-
   function dismissItems(draft: InboxState, client: GatewayClient | null, ids: readonly string[]) {
     const current = readView(client, params.getRuntimeConfig(), false, new Map(), draft);
     if (current.ok) {
@@ -625,8 +547,6 @@ export function createMentionInbox(params: MentionInboxOptions): MentionInbox {
     },
     validateRecipients: (...args: Parameters<typeof policy.validateRecipients>) =>
       readOperation(() => policy.validateRecipients(...args)),
-    list: (client) => legacy(client),
-    dismiss: (client, ids) => legacy(client, ids),
     async listAsync(client, publish) {
       let failure: Result<never, ErrorShape> | undefined;
       try {
@@ -683,23 +603,7 @@ export function createMentionInbox(params: MentionInboxOptions): MentionInbox {
       }
       publish(failure ?? readOperation(() => readView(client)));
     },
-    recordCommittedInput(input: MentionCommittedInput): void {
-      warnMentionInboxDeprecation("recordCommittedInput");
-      if (closing || scheduler.signal.aborted) {
-        return;
-      }
-      const captured = structuredClone(input);
-      const record = () => void recordCommittedInputAsync(captured);
-      // Legacy callers may still submit inside a transaction. Rollback must not enqueue a mention.
-      const database = openClawStateDatabaseCache.getOpenClawStateDatabaseIfOpenAtPath(
-        context.admission.identity.canonicalPath,
-      );
-      if (!database || !deferSqlitePostCommitPublication(database.db, record)) {
-        record();
-      }
-    },
     recordCommittedInputAsync,
-    invalidate,
     invalidateAsync,
     dispose,
   };

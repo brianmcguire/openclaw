@@ -1,5 +1,8 @@
 import { DEFAULT_ACCOUNT_ID, normalizeAccountId } from "openclaw/plugin-sdk/account-id";
-import type { ChannelMessagingAdapter } from "openclaw/plugin-sdk/core";
+import type {
+  ChannelConversationRouteOwnerResolver,
+  ChannelMessagingAdapter,
+} from "openclaw/plugin-sdk/core";
 import { resolveAccountEntry, resolveAgentRoute } from "openclaw/plugin-sdk/routing";
 import { hasImplicitDefaultSlackAccount } from "./accounts.js";
 import {
@@ -18,7 +21,7 @@ type BindingRouteInput = Omit<
   "inspections"
 >;
 type BindingInspections = Parameters<typeof resolveSlackConversationBindingRoute>[0]["inspections"];
-type RouteOwner = ReturnType<NonNullable<ChannelMessagingAdapter["resolveConversationRouteOwner"]>>;
+type RouteOwner = ReturnType<ChannelConversationRouteOwnerResolver>;
 type PreparedRouteOwner =
   | { kind: "terminal"; owner: null | { kind: "unavailable" } }
   | {
@@ -28,7 +31,7 @@ type PreparedRouteOwner =
     };
 
 function prepareSlackConversationRouteOwner(
-  params: Parameters<NonNullable<ChannelMessagingAdapter["resolveConversationRouteOwner"]>>[0],
+  params: Parameters<ChannelConversationRouteOwnerResolver>[0],
 ): PreparedRouteOwner {
   const accountId = normalizeAccountId(params.accountId);
   const accountConfig = resolveAccountEntry(params.cfg.channels?.slack?.accounts, accountId);
@@ -147,9 +150,7 @@ function prepareSlackConversationRouteOwner(
 }
 
 async function prepareSlackConversationRouteOwnersAsync(
-  inputs: readonly Parameters<
-    NonNullable<ChannelMessagingAdapter["resolveConversationRouteOwner"]>
-  >[0][],
+  inputs: readonly Parameters<ChannelConversationRouteOwnerResolver>[0][],
   inspectBindings: Parameters<
     NonNullable<ChannelMessagingAdapter["prepareConversationRouteOwnersAsync"]>
   >[1],

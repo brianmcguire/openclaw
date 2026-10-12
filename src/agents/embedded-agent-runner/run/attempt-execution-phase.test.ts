@@ -98,7 +98,7 @@ describe("runEmbeddedAttemptExecutionPhase", () => {
           externalAbortController: { arm: () => {}, throwIfFiredAfterPrepCleanup: async () => {} },
         });
         fixture.input.sessionLock = transcript;
-        const manager = SessionManager.open({ ...target, ...writer });
+        const manager = await SessionManager.openAsync({ ...target, ...writer });
         const fetchImpl = vi.fn(async () => new Response("ok"));
         fixture.activeSession.prompt.mockImplementation(async () => {
           const requestAuthority = captureGuardedFetchRequestAuthority();
@@ -133,7 +133,7 @@ describe("runEmbeddedAttemptExecutionPhase", () => {
             await execution;
             expect(fetchImpl).toHaveBeenCalledOnce();
             await transcript.withOwnedTranscriptWrite(() =>
-              manager.appendMessage({ role: "user", content: "allowed", timestamp: 1 }),
+              manager.appendMessageAsync({ role: "user", content: "allowed", timestamp: 1 }),
             );
             expect(loadTranscriptEventsSync(target)).toMatchObject([
               { type: "session" },
@@ -146,7 +146,7 @@ describe("runEmbeddedAttemptExecutionPhase", () => {
             expect(fetchImpl).not.toHaveBeenCalled();
             await expect(
               transcript.withOwnedTranscriptWrite(() =>
-                manager.appendMessage({ role: "user", content: "stale", timestamp: 1 }),
+                manager.appendMessageAsync({ role: "user", content: "stale", timestamp: 1 }),
               ),
             ).rejects.toThrow();
             expect(loadTranscriptEventsSync(target)).toEqual([]);
@@ -331,8 +331,12 @@ describe("runEmbeddedAttemptExecutionPhase", () => {
     applyAgentCompactionSettingsFromConfig({ settingsManager, contextTokenBudget: 4_096 });
     applyAgentAutoCompactionGuard({ settingsManager, compactionMode: "default" });
     const sessionManager = guardSessionManager(SessionManager.inMemory(), { runId: "run-1" });
-    sessionManager.appendMessage({ role: "user", content: "Remember Blue Heron", timestamp: 1 });
-    sessionManager.appendMessage({
+    await sessionManager.appendMessageAsync({
+      role: "user",
+      content: "Remember Blue Heron",
+      timestamp: 1,
+    });
+    await sessionManager.appendMessageAsync({
       ...createAssistant(model, [{ type: "text", text: "Blue Heron is the project." }]),
       timestamp: 2,
     });

@@ -131,7 +131,7 @@ describe("interrupted canonical user replay", () => {
     await withInterruptedTurn(
       false,
       async (fixture) => {
-        const original = guardSessionManager(SessionManager.open(fixture.target), {
+        const original = guardSessionManager(await SessionManager.openAsync(fixture.target), {
           runId: fixture.attempt.runId,
         });
         await original.appendMessageAsync(
@@ -358,7 +358,7 @@ describe("interrupted canonical user replay", () => {
               ).toHaveLength(1);
             }
             expect(
-              SessionManager.open(fixture.target)
+              (await SessionManager.openAsync(fixture.target))
                 .getBranch()
                 .filter(
                   (entry) =>
@@ -411,7 +411,7 @@ describe("interrupted canonical user replay", () => {
                 fixture,
               );
               expect(
-                SessionManager.open(fixture.target)
+                (await SessionManager.openAsync(fixture.target))
                   .getBranch()
                   .filter((entry) => entry.type === "message" && entry.message.role === "user"),
               ).toHaveLength(1);
@@ -433,15 +433,15 @@ describe("interrupted canonical user replay", () => {
       timestamp: 1,
       idempotencyKey: "carrier-turn:user",
     };
-    manager.appendMessage(user);
+    await manager.appendMessageAsync(user);
     const carrier = buildRuntimeContextCustomMessage("Original runtime context")!;
-    manager.appendCustomMessageEntry(
+    await manager.appendCustomMessageEntryAsync(
       carrier.customType,
       carrier.content,
       carrier.display,
       carrier.details,
     );
-    manager.appendMessage(
+    await manager.appendMessageAsync(
       createAssistant(
         testModel,
         [
@@ -503,7 +503,7 @@ describe("interrupted canonical user replay", () => {
     "does not promote a %s tail into replay authority",
     async (tail) => {
       await withInterruptedTurn(false, async (fixture) => {
-        const original = guardSessionManager(SessionManager.open(fixture.target), {
+        const original = guardSessionManager(await SessionManager.openAsync(fixture.target), {
           runId: tail === "other-run" ? "unrelated-run" : fixture.attempt.runId,
         });
         const message = createFailureMessage(testModel, createAgentRunRestartAbortError(), true);
@@ -515,7 +515,7 @@ describe("interrupted canonical user replay", () => {
         } else if (tail === "coded-abort") {
           Object.assign(message, { errorCode: "OPENCLAW_DIRECT_ABORT" });
         }
-        original.appendMessage(message);
+        await original.appendMessageAsync(message);
         await withReplaySession(fixture, false, async (_session, submit) => {
           await submit();
           expect(streamMocks.streamSimple).not.toHaveBeenCalled();
@@ -529,9 +529,9 @@ describe("interrupted canonical user replay", () => {
     "does not resume tool work across %s transcript entries",
     async (boundary) => {
       await withInterruptedTurn(false, async (fixture) => {
-        const original = SessionManager.open(fixture.target);
+        const original = await SessionManager.openAsync(fixture.target);
         if (boundary === "final") {
-          guardSessionManager(original, { runId: fixture.attempt.runId }).appendMessage(
+          await guardSessionManager(original, { runId: fixture.attempt.runId }).appendMessageAsync(
             createAssistant(testModel, [{ type: "text", text: "Already finished" }]),
           );
         }
@@ -578,10 +578,10 @@ describe("interrupted canonical user replay", () => {
     async ({ ordering, appendOnly }) => {
       await withInterruptedTurn(appendOnly, async (fixture) => {
         if (ordering === "repeated-restart") {
-          const previous = guardSessionManager(SessionManager.open(fixture.target), {
+          const previous = guardSessionManager(await SessionManager.openAsync(fixture.target), {
             runId: fixture.attempt.runId,
           });
-          previous.appendMessage(
+          await previous.appendMessageAsync(
             createFailureMessage(testModel, createAgentRunRestartAbortError(), true),
           );
         }
@@ -646,7 +646,7 @@ describe("interrupted canonical user replay", () => {
               throw new Error("Replay settled before the mutation barrier");
             }),
           ]);
-          const other = SessionManager.open(fixture.target);
+          const other = await SessionManager.openAsync(fixture.target);
           if (change === "later-user" || change.startsWith("excluded-user")) {
             const laterUser = {
               role: "user" as const,
@@ -654,20 +654,20 @@ describe("interrupted canonical user replay", () => {
               timestamp: 2,
               ...(change.startsWith("excluded-user") ? { excludeFromContext: true as const } : {}),
             };
-            other.appendMessage(laterUser);
+            await other.appendMessageAsync(laterUser);
             if (change === "excluded-user-with-tail") {
-              guardSessionManager(other, { runId: fixture.attempt.runId }).appendMessage(
+              await guardSessionManager(other, { runId: fixture.attempt.runId }).appendMessageAsync(
                 createFailureMessage(testModel, createAgentRunRestartAbortError(), true),
               );
             }
           }
           if (change === "final") {
-            other.appendMessage(
+            await other.appendMessageAsync(
               createAssistant(testModel, [{ type: "text", text: "already done" }]),
             );
           }
           if (change === "reset") {
-            other.appendResetBoundary("reset");
+            await other.appendResetBoundaryAsync("reset");
           }
           if (change === "branch") {
             other.appendLeafControl({ targetId: null, appendParentId: null });
@@ -749,7 +749,7 @@ it.each([
     await withInterruptedTurn(
       false,
       async ({ attempt, target, prepare }) => {
-        const durable = SessionManager.open(target, attempt.workspaceDir);
+        const durable = await SessionManager.openAsync(target, attempt.workspaceDir);
         const manager = !detached
           ? durable
           : fresh

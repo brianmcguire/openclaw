@@ -1,21 +1,15 @@
 import assert from "node:assert/strict";
-import { isRecord } from "@openclaw/normalization-core/record-coerce";
-import { expect, it, vi } from "vitest";
+import { expect, it } from "vitest";
 import {
   awaitGateBeforeSettlement,
   createDeferred,
   withinTest,
 } from "../../test/helpers/promise.js";
 import { replaceSessionEntry } from "../config/sessions/session-accessor.sqlite-entry.js";
-import { loadTranscriptEventsSync } from "../config/sessions/session-accessor.sqlite-read.js";
-import {
-  appendTranscriptMessageSync,
-  withTranscriptWriteLock,
-} from "../config/sessions/session-accessor.sqlite-transcript-write.js";
+import { withTranscriptWriteLock } from "../config/sessions/session-accessor.sqlite-transcript-write.js";
 import type { SessionTranscriptWriteLockAccessorContext } from "../config/sessions/session-accessor.types.js";
 import { openOpenClawAgentDatabase } from "../state/openclaw-agent-db.js";
 import { withOpenClawTestState } from "../test-utils/openclaw-test-state.js";
-import { withSessionTranscriptWriteLock } from "./session-transcript-runtime.js";
 
 async function seed(env: NodeJS.ProcessEnv) {
   const scope = { agentId: "main", sessionId: "locked", sessionKey: "agent:main:locked", env };
@@ -88,85 +82,5 @@ it("drains accepted operations after callback failure and seals the native conte
       release.resolve();
       await Promise.allSettled([writing, ...accepted]);
     }
-  });
-});
-
-it("skips async preparation on replay and rejects a stale fresh preparation", async () => {
-  await withOpenClawTestState({ scenario: "minimal" }, async ({ env }) => {
-    const scope = await seed(env);
-    const database = openOpenClawAgentDatabase(scope);
-    const original: {
-      role: string;
-      content: string;
-      idempotencyKey: string;
-      custom?: { toJSON(): never };
-    } = {
-      role: "assistant",
-      content: "original",
-      idempotencyKey: "original",
-      custom: {
-        toJSON() {
-          throw new Error("Discarded input must not be serialized");
-        },
-      },
-    };
-    await withSessionTranscriptWriteLock(scope, (locked) =>
-      locked.appendMessage({
-        eventId: "original",
-        message: original,
-        prepareMessageAfterIdempotencyCheck: ({ custom: _custom, ...message }) => {
-          expect(database.db.isTransaction).toBe(true);
-          return message;
-        },
-      }),
-    );
-    const prepare = vi.fn(async () => {
-      throw new Error("Replay must not prepare");
-    });
-    await expect(
-      withSessionTranscriptWriteLock(scope, (locked) =>
-        locked.appendMessage({
-          message: original,
-          prepareMessageAfterIdempotencyCheckAsync: prepare,
-        }),
-      ),
-    ).resolves.toMatchObject({ appended: false, messageId: "original" });
-    expect(prepare).not.toHaveBeenCalled();
-    await expect(
-      withSessionTranscriptWriteLock(scope, (locked) =>
-        locked.appendMessage({
-          message: { ...original, idempotencyKey: "suppressed" },
-          prepareMessageAfterIdempotencyCheckAsync: async () => undefined,
-        }),
-      ),
-    ).resolves.toBeUndefined();
-    await expect(
-      withSessionTranscriptWriteLock(scope, (locked) =>
-        locked.appendMessage({ message: undefined }),
-      ),
-    ).resolves.toBeUndefined();
-    await expect(
-      withSessionTranscriptWriteLock(scope, (locked) =>
-        locked.appendMessage({
-          eventId: "stale",
-          message: { role: "assistant", content: "stale" },
-          prepareMessageAfterIdempotencyCheckAsync: async (message) => {
-            expect(database.db.isTransaction).toBe(false);
-            expect(
-              appendTranscriptMessageSync(scope, {
-                eventId: "concurrent",
-                message: { role: "assistant", content: "concurrent" },
-              }).ok,
-            ).toBe(true);
-            return message;
-          },
-        }),
-      ),
-    ).rejects.toThrow("SQLite transcript changed while preparing rewrite");
-    expect(
-      loadTranscriptEventsSync(scope)
-        .filter(isRecord)
-        .map((event) => event.id),
-    ).toEqual([scope.sessionId, "original", "concurrent"]);
   });
 });

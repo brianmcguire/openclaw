@@ -45,7 +45,6 @@ export type {
   SessionsCatalogStartTerminalResult,
 } from "../../packages/gateway-protocol/src/schema/sessions-catalog.js";
 export {
-  deleteSessionUpstreamLink,
   deleteSessionUpstreamLinkAsync,
   upsertSessionUpstreamLink,
   upsertSessionUpstreamLinkAsync,

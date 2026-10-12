@@ -20,7 +20,6 @@ import {
   reserveSqliteWorkerInputPreparation,
 } from "../infra/sqlite-worker-store.js";
 import { createKeyedFifoLeaseRegistry } from "../shared/keyed-fifo-lease.js";
-import { createLazyRuntimeModule } from "../shared/lazy-runtime.js";
 import { isStateDatabaseReadAdmissionInvalidatedError } from "../state/openclaw-state-db-async-lifecycle.js";
 import { executeExistingOpenClawStateRead } from "../state/openclaw-state-db-readonly.js";
 import type { OpenClawStateDatabaseOptions } from "../state/openclaw-state-db.js";
@@ -37,7 +36,6 @@ import type {
   CronStandingGrantLookupInput,
   ConsumeCronStandingGrantResult,
 } from "./operator-approval-standing-grants.types.js";
-import type { OperatorApprovalCommitReceipt } from "./operator-approval-store.operations.js";
 import {
   operatorApprovalPublication,
   operatorStandingGrantPublication,
@@ -92,9 +90,6 @@ type Options = {
 };
 type Input<Key extends Operation> = OperatorApprovalWorkerOperations[Key]["input"] & Options;
 
-const loadNativeStore = createLazyRuntimeModule(
-  () => import("./operator-approval-store.native.js"),
-);
 const leases = createKeyedFifoLeaseRegistry(Symbol.for("openclaw.operatorApprovalStoreLeases"));
 
 async function runApprovalStoreOperation<T>(
@@ -151,7 +146,6 @@ function execute<Key extends Operation>(
     context.admission.assertCurrent();
     assertCallerCurrent();
   };
-  const native = guard?.family === "native-compatibility";
   let admission: SqliteWorkerOperationAdmission | undefined;
   const createAdmission: SqliteWorkerAdmissionFactory = (operation) => {
     let commitAdmitted = false;
@@ -205,26 +199,6 @@ function execute<Key extends Operation>(
     context,
     captured,
     async (scope, preparation) => {
-      if (native) {
-        const store = await loadNativeStore();
-        preparation.assertCurrent();
-        assertOperationCurrent();
-        preparation.release();
-        let receipt: OperatorApprovalCommitReceipt | undefined;
-        try {
-          return store.executeNativeOperatorApproval(
-            type,
-            captured,
-            context,
-            assertOperationCurrent,
-            (committed) => {
-              receipt = committed;
-            },
-          );
-        } finally {
-          publishCommitted(receipt);
-        }
-      }
       try {
         return await preparation.handoff(() => scope.execute({ type, input: captured }));
       } finally {
@@ -233,9 +207,8 @@ function execute<Key extends Operation>(
       }
     },
     {
-      // Native guards run only after FIFO and outside worker-held transactions.
-      assertCurrent: native ? undefined : assertOperationCurrent,
-      ...(native ? {} : { createAdmission }),
+      assertCurrent: assertOperationCurrent,
+      createAdmission,
     },
     assertOperationCurrent,
   );

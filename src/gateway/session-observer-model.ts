@@ -15,7 +15,6 @@ import {
 import type { prepareUtilityCompletionForAgent } from "../agents/utility-completion.js";
 import type { resolveUtilityModelRefForAgent } from "../agents/utility-model.js";
 import {
-  loadSessionEntryReadOnly,
   patchSessionEntryCore,
   patchSessionEntryTarget,
 } from "../config/sessions/session-accessor.js";
@@ -301,16 +300,6 @@ const ModelDigestSchema = z.strictObject({
 export function sanitizeSessionObserverModelText(value: string, maxChars: number): string {
   const normalized = redactToolPayloadText(value).replace(/\s+/gu, " ").trim();
   return truncateUtf16Safe(normalized, maxChars);
-}
-
-export function defaultReadSession(
-  sessionKey: string,
-  agentId: string,
-  storePath?: string,
-): SessionEntry | undefined {
-  // Read-only: observation must never materialize agent state (dirs, agent DB
-  // registration) for agents that are not configured.
-  return loadSessionEntryReadOnly({ sessionKey, agentId, ...(storePath ? { storePath } : {}) });
 }
 
 export async function defaultPersistDigest(params: {

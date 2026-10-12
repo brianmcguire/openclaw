@@ -287,8 +287,8 @@ describe("Gateway ACP completion ownership", () => {
               sessionKey: targetSessionKey,
               inboundAudio: false,
               shouldRouteToOriginating: false,
-              shouldSendToolSummaries: false,
-              shouldSendFullToolDetails: false,
+              shouldSendToolSummariesAsync: async () => false,
+              shouldSendFullToolDetailsAsync: async () => false,
               sendPolicy: "allow",
             },
             {

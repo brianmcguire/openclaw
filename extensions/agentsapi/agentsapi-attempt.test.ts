@@ -275,9 +275,8 @@ describe("Agents API completed reply settlement", () => {
     expect(fixture.onPartialReply).toHaveBeenCalledExactlyOnceWith({
       text: "The completed answer.",
     });
-    const persisted = SessionManager.open(
-      fixture.target,
-      fixture.params.workspaceDir,
+    const persisted = (
+      await SessionManager.openAsync(fixture.target, fixture.params.workspaceDir)
     ).buildSessionContext().messages;
     expect(persisted).toEqual([result.currentAttemptCompletedAssistant]);
     expect(result.messagesSnapshot).toEqual(persisted);
@@ -309,8 +308,9 @@ describe("Agents API completed reply settlement", () => {
       expect(result.assistantTexts).toEqual([]);
       expect(fixture.onPartialReply).not.toHaveBeenCalled();
       expect(
-        SessionManager.open(fixture.target, fixture.params.workspaceDir).buildSessionContext()
-          .messages,
+        (
+          await SessionManager.openAsync(fixture.target, fixture.params.workspaceDir)
+        ).buildSessionContext().messages,
       ).toEqual([]);
     },
   );
@@ -419,7 +419,9 @@ describe("Agents API retry prompt history", () => {
     "handles %s after steering without widening retry prompt history",
     async (retryScope) => {
       const fixture = await createAttempt();
-      await SessionManager.open(fixture.target, fixture.params.workspaceDir).appendMessageAsync({
+      await (
+        await SessionManager.openAsync(fixture.target, fixture.params.workspaceDir)
+      ).appendMessageAsync({
         role: "user",
         content: "Earlier request.",
         timestamp: 1,

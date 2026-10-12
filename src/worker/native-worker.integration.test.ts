@@ -77,8 +77,8 @@ function owner(): ComposedGatewayHarness {
   return gateway;
 }
 
-function messages() {
-  return SessionManager.open(owner().sessionTarget)
+async function messages() {
+  return (await SessionManager.openAsync(owner().sessionTarget))
     .getEntries()
     .flatMap((entry) => (entry.type === "message" ? [entry.message] : []));
 }
@@ -217,7 +217,7 @@ async function launch(descriptor: WorkerLaunchDescriptor, startup?: NativeInfere
             stderr,
             admissions: owner().admissions.length,
             methods: owner().requests.map((request) => request.method),
-            transcript: messages().map((message) =>
+            transcript: (await messages()).map((message) =>
               message.role === "assistant"
                 ? {
                     role: message.role,
@@ -432,7 +432,7 @@ describe.skipIf(process.platform === "win32")(
       expect(JSON.stringify(provider.requests[2]!.body.messages)).toContain("startupPresent");
       expectNoProxyInference();
       expect(owner().admissions).toHaveLength(1);
-      const transcript = messages();
+      const transcript = await messages();
       expect(transcript.map((message) => message.role)).toEqual([
         "user",
         "assistant",
@@ -459,7 +459,7 @@ describe.skipIf(process.platform === "win32")(
         },
       });
       expect(outcome.result).toMatchObject({
-        transcriptLeafId: SessionManager.open(owner().sessionTarget).getLeafId(),
+        transcriptLeafId: (await SessionManager.openAsync(owner().sessionTarget)).getLeafId(),
       });
       expect(JSON.stringify(provider.requests)).not.toContain("synthetic-other-worker-key");
       expect(JSON.stringify(owner().requests)).not.toContain(LOCAL_KEY);
@@ -503,7 +503,7 @@ describe.skipIf(process.platform === "win32")(
         );
         expect(provider.requests).toEqual([]);
         expect(owner().admissions).toEqual([]);
-        expect(messages()).toEqual([]);
+        expect(await messages()).toEqual([]);
         expectNoProxyInference();
       },
       40_000,
@@ -529,7 +529,7 @@ describe.skipIf(process.platform === "win32")(
       const descriptor = await localDescriptor();
       const worker = await launch(descriptor, startupFor(descriptor, provider.baseUrl));
       await withinTest(provider.entered, activeTestSignal);
-      const before = messages();
+      const before = await messages();
       const commitsBefore = owner().requestParams("worker.transcript.commit").length;
       expect(before.map((message) => message.role)).toEqual(["user"]);
       worker.cancel();
@@ -537,7 +537,7 @@ describe.skipIf(process.platform === "win32")(
       expect(outcome.result).toMatchObject({ status: "failed", reason: "turn-failed" });
       await withinTest(provider.disconnected, activeTestSignal);
       expect(provider.requests).toHaveLength(1);
-      expect(messages()).toEqual(before);
+      expect(await messages()).toEqual(before);
       expect(owner().requestParams("worker.transcript.commit")).toHaveLength(commitsBefore);
       const finishing = owner()
         .requestParams("worker.live-event")
@@ -560,7 +560,7 @@ describe.skipIf(process.platform === "win32")(
       const worker = await launch(descriptor, startupFor(descriptor, provider.baseUrl));
       await withinTest(provider.entered, activeTestSignal);
       const admitted = owner().admissions.length;
-      const before = messages();
+      const before = await messages();
       const resume = owner().pauseConnections();
       try {
         await owner().reclaimWithCredential(
@@ -571,7 +571,7 @@ describe.skipIf(process.platform === "win32")(
         await withinTest(provider.disconnected, activeTestSignal);
         expect(owner().admissions).toHaveLength(admitted);
         expect(provider.requests).toHaveLength(1);
-        expect(messages()).toEqual(before);
+        expect(await messages()).toEqual(before);
         expectNoProxyInference();
       } finally {
         resume();
@@ -586,7 +586,7 @@ describe.skipIf(process.platform === "win32")(
       const descriptor = await localDescriptor();
       const worker = await launch(descriptor, startupFor(descriptor, provider.baseUrl));
       await withinTest(provider.entered, activeTestSignal);
-      const before = messages();
+      const before = await messages();
       const admitted = owner().admissions.length;
       const epoch = await owner().reclaimWithCredential(
         "synthetic-replacement-credential",
@@ -602,7 +602,7 @@ describe.skipIf(process.platform === "win32")(
       expect(outcome.stdout).toBe("");
       await withinTest(provider.disconnected, activeTestSignal);
       provider.release();
-      expect(messages()).toEqual(before);
+      expect(await messages()).toEqual(before);
       expectNoProxyInference();
     }, 40_000);
 
@@ -615,7 +615,7 @@ describe.skipIf(process.platform === "win32")(
       expect(owner().providerCalls).toBe(1);
       expect(owner().requestParams("worker.inference.start")).toHaveLength(1);
       expect(provider.requests).toEqual([]);
-      expect(messages().at(-1)).toMatchObject({
+      expect((await messages()).at(-1)).toMatchObject({
         content: [{ type: "text", text: "Gateway-proxied sibling completed." }],
       });
     }, 40_000);

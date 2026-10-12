@@ -1346,40 +1346,6 @@ export function createAuthProfileStoreRuntime(
     });
   }
 
-  /** @deprecated Use ensureAuthProfileStoreForLocalUpdateAsync. Removed at the next Plugin SDK major. */
-  function ensureAuthProfileStoreForLocalUpdate(agentDir?: string): AuthProfileStore {
-    warnPluginSdkDeprecation({
-      family: "auth-profiles",
-      method: "ensureAuthProfileStoreForLocalUpdate",
-      replacement: "ensureAuthProfileStoreForLocalUpdateAsync",
-    });
-    if (isEnvOnlyAuthProfileRuntime()) {
-      return createEmptyAuthProfileStore();
-    }
-    const effectiveAgentDir = resolveRuntimeAuthProfileAgentDir(agentDir);
-    const options: LoadAuthProfileStoreOptions = { syncExternalCli: false };
-    const store = loadAuthProfileStoreForAgent(effectiveAgentDir, options);
-    const authPath = effectiveAgentDir
-      ? resolveAgentAuthPath(effectiveAgentDir)
-      : resolveSharedAuthPath();
-    const mainAgentDir = resolveRuntimeAuthProfileAgentDir();
-    const mainAuthPath = mainAgentDir
-      ? resolveAgentAuthPath(mainAgentDir)
-      : resolveSharedAuthPath();
-    if (!effectiveAgentDir || authPath === mainAuthPath) {
-      return store;
-    }
-
-    const mainStore = loadInheritedAuthProfileStore(
-      () => loadAuthProfileStoreForAgent(undefined, { readOnly: true, syncExternalCli: false }),
-      undefined,
-      getScopedAuthProfileEnv(),
-    );
-    return mainStore
-      ? mergeAuthProfileStores(mainStore, store, { preserveBaseRuntimeExternalProfiles: true })
-      : store;
-  }
-
   async function ensureAuthProfileStoreForLocalUpdateAsync(
     agentDir?: string,
   ): Promise<AuthProfileStore> {
@@ -1717,7 +1683,6 @@ export function createAuthProfileStoreRuntime(
     ensureAuthProfileStoreAsync,
     ensureAuthProfileStoreWithoutExternalProfiles,
     ensureAuthProfileStoreWithoutExternalProfilesAsync,
-    ensureAuthProfileStoreForLocalUpdate,
     ensureAuthProfileStoreForLocalUpdateAsync,
     saveAuthProfileStore,
     saveAuthProfileStoreWithPreparedOwner,

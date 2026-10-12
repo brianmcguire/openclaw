@@ -178,7 +178,6 @@ export const SESSION_PERSISTENCE_COMPAT_RECORDS = [
     ],
     tests: [
       "src/plugin-sdk/session-transcript-lock.native.test.ts",
-      "src/plugin-sdk/session-transcript-preparation-compat.test.ts",
       "src/plugins/compat/registry.test.ts",
     ],
     releaseNote:
@@ -200,7 +199,6 @@ export const SESSION_PERSISTENCE_COMPAT_RECORDS = [
     ],
     tests: [
       "src/plugin-sdk/session-catalog-upstream-compat.test.ts",
-      "src/plugin-sdk/agent-harness-session-compat.test.ts",
       "src/sessions/session-upstream-links.test.ts",
       "src/plugins/compat/registry.test.ts",
     ],
@@ -326,11 +324,7 @@ export const SESSION_PERSISTENCE_COMPAT_RECORDS = [
     diagnostics: [
       "TypeScript @deprecated annotation and migration documentation; no runtime warnings",
     ],
-    tests: [
-      "src/plugin-sdk/session-reset-freshness-compat.test.ts",
-      "src/config/sessions/entry-freshness.test.ts",
-      "src/plugins/compat/registry.test.ts",
-    ],
+    tests: ["src/config/sessions/entry-freshness.test.ts", "src/plugins/compat/registry.test.ts"],
     releaseNote:
       "Channel plugins can await session reset freshness through the transcript worker. Existing plugins retain the synchronous method and reset policy; stored data and update behavior are unchanged.",
   },
@@ -373,8 +367,6 @@ export const SESSION_PERSISTENCE_COMPAT_RECORDS = [
       "NativeSessionGenerationOperations",
     ],
     tests: [
-      "src/plugin-sdk/agent-harness-session-compat.test.ts",
-      "src/agents/harness/native-session/binding-generation.test.ts",
       "src/agents/harness/native-session/binding-generation-authority.test.ts",
       "src/plugins/compat/registry.test.ts",
     ],

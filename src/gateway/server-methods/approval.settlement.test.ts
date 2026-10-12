@@ -30,7 +30,7 @@ import {
 } from "./approval.test-support.js";
 
 const resultDelivery = vi.hoisted(() => ({
-  loseResult: undefined as "worker" | "native" | undefined,
+  loseResult: undefined as "worker" | undefined,
   hideReceipt: false,
   wrapRefusal: false,
   wrappedRefusal: undefined as Error | undefined,
@@ -107,22 +107,6 @@ vi.mock("../../state/openclaw-state-worker-store.js", async (importOriginal) => 
           }),
         options,
       ),
-  };
-});
-vi.mock("../operator-approval-store.native.js", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("../operator-approval-store.native.js")>();
-  return {
-    ...actual,
-    executeNativeOperatorApproval: (
-      ...args: Parameters<typeof actual.executeNativeOperatorApproval>
-    ) => {
-      const result = actual.executeNativeOperatorApproval(...args);
-      if (args[0] === "operatorApprovals.resolve" && resultDelivery.loseResult === "native") {
-        resultDelivery.loseResult = undefined;
-        throw new SqliteWorkerError("synthetic committed result delivery loss", "outcome-unknown");
-      }
-      return result;
-    },
   };
 });
 
@@ -347,7 +331,7 @@ it.each(["resolve", "cancel", "expire"] as const)(
   },
 );
 
-it.each(["worker", "native", "missing-receipt"] as const)(
+it.each(["worker", "missing-receipt"] as const)(
   "uses only actual commit receipts after result loss (%s)",
   async (variant) => {
     const onLifecycle = vi.fn();
@@ -361,23 +345,11 @@ it.each(["worker", "native", "missing-receipt"] as const)(
       settled = true;
     });
     const readback = vi.spyOn(operatorApprovalStore, "getOperatorApprovalDetailed");
-    resultDelivery.loseResult = variant === "native" ? "native" : "worker";
+    resultDelivery.loseResult = "worker";
     resultDelivery.hideReceipt = variant === "missing-receipt";
-    await expect(
-      manager.resolveAutoReview(
-        record.id,
-        null,
-        undefined,
-        variant === "native"
-          ? {
-              family: "native-compatibility",
-              assertCurrent: () => {
-                getOperatorApproval({ id: record.id, databaseOptions });
-              },
-            }
-          : undefined,
-      ),
-    ).rejects.toThrow("synthetic committed result delivery loss");
+    await expect(manager.resolveAutoReview(record.id, null, undefined)).rejects.toThrow(
+      "synthetic committed result delivery loss",
+    );
     expect(readback).toHaveBeenCalledTimes(1);
     expect(getOperatorApproval({ id: record.id, databaseOptions })).toMatchObject({
       status: "allowed",

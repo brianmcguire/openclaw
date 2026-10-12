@@ -57,9 +57,9 @@ describe("profile-owned skill publication and selection", () => {
       const pins = await seedSkillLibrarySelection(alice, options);
       const entries = loadSkillLibrarySelection(pins, options);
       const { buildSkillSnapshot } = await import("../loading/workspace-skill-prompt.js");
-      const { buildWorkspaceSkillCommandSpecs } = await import("../discovery/command-specs.js");
+      const { assembleWorkspaceSkillCommandSpecs } = await import("../discovery/command-specs.js");
       const snapshot = await buildSkillSnapshot(stateDir, { entries });
-      const commands = buildWorkspaceSkillCommandSpecs(stateDir, { entries });
+      const commands = assembleWorkspaceSkillCommandSpecs(stateDir, entries);
       expect(pins[0]!.name).toMatch(/^s_long_skil_[a-f0-9]{20}$/);
       expect(commands[0]).toMatchObject({
         name: pins[0]!.name,
@@ -74,9 +74,6 @@ describe("profile-owned skill publication and selection", () => {
       await expect(buildSkillSnapshot(stateDir, { entries: [copied, ...entries] })).rejects.toThrow(
         "ambiguous",
       );
-      expect(() =>
-        buildWorkspaceSkillCommandSpecs(stateDir, { entries: [copied, ...entries] }),
-      ).toThrow("ambiguous");
     },
   );
   it("discovers pinned commands through the loader without leaking them into workspace state", async () => {
@@ -112,38 +109,39 @@ describe("profile-owned skill publication and selection", () => {
         options,
       ),
     ).toThrow(expect.objectContaining({ code: "NOT_FOUND" }));
-    const {
-      listSkillCommandsForWorkspace,
-      listSkillCommandsForAgents,
-      prepareSkillCommandsForAgents,
-    } = await import("../discovery/chat-commands.js");
+    const { prepareSkillCommandsForWorkspace, prepareSkillCommandsForAgents } =
+      await import("../discovery/chat-commands.js");
     await withEnvAsync({ OPENCLAW_STATE_DIR: stateDir }, async () => {
       const cfg = { agents: { defaults: { skills: [] } } };
       const discover = (
-        overrides: Partial<Parameters<typeof listSkillCommandsForWorkspace>[0]> = {},
+        overrides: Partial<Parameters<typeof prepareSkillCommandsForWorkspace>[0]> = {},
       ) =>
-        listSkillCommandsForWorkspace({
+        prepareSkillCommandsForWorkspace({
           workspaceDir: stateDir,
           cfg,
           agentId: "main",
           sessionEntry: { skillLibrarySelections: pins },
           ...overrides,
         });
-      const commands = discover({ skillFilter: [saved.entry.name] });
+      const commands = await discover({ skillFilter: [saved.entry.name] });
       expect(commands).toHaveLength(1);
       expect(commands[0]).toMatchObject({
         name: saved.entry.name,
         skillFile: expect.stringContaining(saved.entry.revision),
       });
-      expect(discover()).toEqual([]);
-      expect(discover({ includeAllowlistHidden: true })).toContainEqual(commands[0]);
+      expect(await discover()).toEqual([]);
+      expect(await discover({ includeAllowlistHidden: true })).toContainEqual(commands[0]);
       expect(
-        discover({
-          includeAllowlistHidden: true,
-          cfg: { ...cfg, skills: { entries: { [saved.entry.name]: { enabled: false } } } },
-        }).map((entry) => entry.name),
+        (
+          await discover({
+            includeAllowlistHidden: true,
+            cfg: { ...cfg, skills: { entries: { [saved.entry.name]: { enabled: false } } } },
+          })
+        ).map((entry) => entry.name),
       ).not.toContain(saved.entry.name);
-      expect(discover({ sessionEntry: undefined, skillFilter: [saved.entry.name] })).toEqual([]);
+      expect(await discover({ sessionEntry: undefined, skillFilter: [saved.entry.name] })).toEqual(
+        [],
+      );
       const agentParams = {
         cfg: {
           agents: {
@@ -154,7 +152,6 @@ describe("profile-owned skill publication and selection", () => {
         agentIds: ["main"],
         sessionEntry: { skillLibrarySelections: pins },
       };
-      expect(listSkillCommandsForAgents(agentParams)).toEqual(commands);
       expect(await prepareSkillCommandsForAgents(agentParams)).toEqual(commands);
       expect(
         await prepareSkillCommandsForAgents({ ...agentParams, sessionEntry: undefined }),

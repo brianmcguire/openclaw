@@ -8,13 +8,14 @@ import {
   type SessionObserverRead,
   type SessionObserverState,
 } from "./session-observer-model.js";
+import { captureSessionObserverRead } from "./session-observer-read.js";
 import type { createSessionObserverWork } from "./session-observer-work.js";
 import { resolveSessionSubscriptionKey } from "./session-subscription-keys.js";
 
 /** Retire same-run live health even when terminal observation cannot run the model. */
 export function createSessionObserverTerminalPublisher(params: {
   dormantRuns: Map<string, DormantSessionObserverRun>;
-  readSession: NonNullable<SessionObserverDeps["readSession"]>;
+  deps: SessionObserverDeps;
   persistDigest: NonNullable<SessionObserverDeps["persistDigest"]>;
   now: () => number;
   work: Pick<ReturnType<typeof createSessionObserverWork>, "withCurrent" | "closing" | "resetting">;
@@ -32,12 +33,16 @@ export function createSessionObserverTerminalPublisher(params: {
       return;
     }
     const dormant = params.dormantRuns.get(runId);
-    const reader = source.state?.reader ?? dormant?.reader ?? source.reader;
     const sessionKey = source.event?.sessionKey ?? source.state?.sessionKey ?? dormant?.sessionKey;
     const agentId = source.event?.agentId ?? source.state?.agentId ?? dormant?.agentId;
     if (!sessionKey || !agentId) {
       return;
     }
+    const reader =
+      source.state?.reader ??
+      dormant?.reader ??
+      source.reader ??
+      captureSessionObserverRead(params.deps, sessionKey, agentId);
     const stillCurrent = params.runStillCurrent(runId, sessionKey, agentId);
     if (!stillCurrent()) {
       return;
@@ -47,8 +52,8 @@ export function createSessionObserverTerminalPublisher(params: {
         source,
         dormant,
         // Synthesis only prepares a write; its transaction revalidates the row before commit.
-        readSession: reader ? () => reader.withRead((session) => session) : params.readSession,
-        persistDigest: (input) => params.persistDigest({ ...input, ...(reader ? { reader } : {}) }),
+        readSession: () => reader.withRead((session) => session),
+        persistDigest: (input) => params.persistDigest({ ...input, reader }),
         now: params.now,
         stillCurrent,
       });

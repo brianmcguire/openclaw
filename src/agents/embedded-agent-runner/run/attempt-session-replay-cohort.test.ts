@@ -24,7 +24,9 @@ describe("transcript replay cohorts", () => {
     await withInterruptedTurn(
       false,
       async (fixture) => {
-        await SessionManager.open(fixture.target).appendLeafControlAsync({
+        await (
+          await SessionManager.openAsync(fixture.target)
+        ).appendLeafControlAsync({
           targetId: null,
           appendParentId: null,
         });
@@ -62,7 +64,7 @@ describe("transcript replay cohorts", () => {
     await withInterruptedTurn(
       false,
       async (fixture) => {
-        const writer = SessionManager.open(fixture.target);
+        const writer = await SessionManager.openAsync(fixture.target);
         await writer.appendMessageAsync(
           createAssistant(testModel, [{ type: "text", text: "Already completed" }]),
         );
@@ -130,7 +132,9 @@ describe("transcript replay cohorts", () => {
             storePath: fixture.target.storePath,
           });
           if (change === "metadata-append") {
-            await SessionManager.open(fixture.target).appendThinkingLevelChange("high");
+            await (
+              await SessionManager.openAsync(fixture.target)
+            ).appendThinkingLevelChange("high");
           } else if (change === "local-navigation") {
             await prepared.sessionManager.resetLeafAsync();
           } else if (change === "mutable-message" || change === "wrong-hint") {
@@ -150,7 +154,9 @@ describe("transcript replay cohorts", () => {
           expect(consume).toBeTypeOf("function");
           const admitted = vi.fn();
           if (change === "completed-after-preparation") {
-            await SessionManager.open(fixture.target).appendMessageAsync(
+            await (
+              await SessionManager.openAsync(fixture.target)
+            ).appendMessageAsync(
               createAssistant(testModel, [{ type: "text", text: "Completed while preparing" }]),
             );
             await expect(consume!(admitted)).rejects.toThrow(/replay admission/);
@@ -212,7 +218,7 @@ describe("transcript replay cohorts", () => {
           if (prepared) {
             expect(admit).toBeTypeOf("function");
           }
-          const original = SessionManager.open(fixture.target);
+          const original = await SessionManager.openAsync(fixture.target);
           const validated = createDeferredCore();
           const release = createDeferredCore();
           const createPreparedReads = transcriptReaders.createPreparedSessionTranscriptReads;
@@ -264,7 +270,7 @@ describe("transcript replay cohorts", () => {
               "Replay validation was not reached",
             );
             if (change === "rewrite") {
-              expect(original.removeTrailingEntries(() => true)).toBeGreaterThan(0);
+              expect(await original.removeTrailingEntriesAsync(() => true)).toBeGreaterThan(0);
             } else if (change === "close") {
               closing = closeOpenClawAgentDatabaseByPathAsync(fixture.target.storePath!);
             } else {

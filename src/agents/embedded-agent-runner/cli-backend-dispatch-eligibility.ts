@@ -4,7 +4,6 @@ import type { OpenClawConfig } from "../../config/types.openclaw.js";
 import { resolveRuntimeCliBackends } from "../../plugins/cli-backends.runtime.js";
 import type { AuthProfileStore } from "../auth-profiles/types.js";
 import {
-  ensureAuthProfileStore,
   ensureAuthProfileStoreAsync,
   resolveAuthProfileOrder,
   resolveModelAuthMode,
@@ -74,27 +73,6 @@ function canDispatchWithAuthStore(
             workspaceDir: params.workspaceDir,
           });
   return authMode !== "api-key" && authMode !== "mixed" && authMode !== "aws-sdk";
-}
-
-/** @deprecated Use resolveEmbeddedCliBackendDispatchEligibilityAsync for worker-owned reads. */
-export function resolveEmbeddedCliBackendDispatchEligibility(
-  params: EmbeddedCliBackendDispatchEligibilityParams,
-): { provider: string } | undefined {
-  const provider = resolveDispatchProvider(params);
-  if (!provider) {
-    return undefined;
-  }
-  try {
-    const store =
-      params.preparedAuthStore ??
-      ensureAuthProfileStore(params.agentDir, { config: params.config });
-    if (!canDispatchWithAuthStore(params, provider, store)) {
-      return undefined;
-    }
-  } catch {
-    // Unreadable stores keep the CLI best-effort path, as missing credentials do.
-  }
-  return { provider };
 }
 
 /** Reads credential metadata through its worker without materializing or refreshing secrets. */

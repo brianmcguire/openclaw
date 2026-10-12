@@ -472,8 +472,10 @@ describe("runMemoryFlushIfNeeded", () => {
           profileId: "guest",
           scopes: ["operator.write"],
         });
-        const retained = memorySession.appendMessage(makeUserMessage("Private retained work", 1));
-        memorySession.appendCompaction("Private summary", retained, 120);
+        const retained = await memorySession.appendMessageAsync(
+          makeUserMessage("Private retained work", 1),
+        );
+        await memorySession.appendCompactionAsync("Private summary", retained, 120);
         throw primaryError;
       })
       .mockImplementationOnce(async (params: EmbeddedAgentParams) => {
@@ -2137,7 +2139,9 @@ describe("runMemoryFlushIfNeeded", () => {
     const scope = sessionScope("agent:main:main", "sqlite-force-flush-session.json");
     const { sessionKey, storePath } = scope;
     await upsertSessionEntryCore(scope, { sessionId: "session", updatedAt: 10 });
-    SessionManager.open(scope, rootDir).appendMessage({
+    await (
+      await SessionManager.openAsync(scope, rootDir)
+    ).appendMessageAsync({
       role: "user",
       content: "x".repeat(256),
       timestamp: 1,

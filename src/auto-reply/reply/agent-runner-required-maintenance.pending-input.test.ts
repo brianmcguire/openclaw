@@ -245,7 +245,7 @@ describe("required maintenance with restart-safe admitted input", () => {
             totalTokensVersion: SESSION_TOTAL_TOKENS_VERSION,
           };
           await replaceSessionEntry(scope, entry);
-          const seed = SessionManager.open(scope, state.workspaceDir);
+          const seed = await SessionManager.openAsync(scope, state.workspaceDir);
           // One archive continues after a retention no-op; two archives leave
           // a complete prefix for the earlier retention-only pass.
           const priorTurns =
@@ -256,12 +256,12 @@ describe("required maintenance with restart-safe admitted input", () => {
                   [1_400, priorInputTokens],
                 ] as const);
           for (const [rows, inputTokens] of priorTurns) {
-            seed.appendMessage({
+            await seed.appendMessageAsync({
               role: "user",
               content: "Earlier archive context.\n".repeat(rows),
               timestamp: 1,
             });
-            seed.appendMessage(
+            await seed.appendMessageAsync(
               makeAssistantMessageFixture({
                 provider: "test-provider",
                 api: "openai-completions",
@@ -354,9 +354,9 @@ describe("required maintenance with restart-safe admitted input", () => {
             relativePath: "memory/checkpoint.md",
           }));
           const foregroundContexts: unknown[][] = [];
-          observeForeground = () => {
+          observeForeground = async () => {
             foregroundContexts.push(
-              SessionManager.open(scope, state.workspaceDir)
+              (await SessionManager.openAsync(scope, state.workspaceDir))
                 .buildSessionContext()
                 .messages.filter(
                   (message) => message.role === "user" || message.role === "assistant",

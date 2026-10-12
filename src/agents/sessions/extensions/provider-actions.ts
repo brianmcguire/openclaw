@@ -1,9 +1,9 @@
 import { coerceErrorMessage } from "@openclaw/normalization-core/error-coercion";
 import type { ModelRegistry } from "../model-registry.js";
-import type { ExtensionError, ExtensionRuntime, ProviderConfig } from "./types.js";
+import type { ExtensionError, ExtensionRuntimeV2, ProviderConfig } from "./types.js";
 
 export function bindExtensionProviderActions(
-  runtime: ExtensionRuntime,
+  runtime: ExtensionRuntimeV2,
   modelRegistry: ModelRegistry,
   emitError: (error: ExtensionError) => void,
   providerActions?: {

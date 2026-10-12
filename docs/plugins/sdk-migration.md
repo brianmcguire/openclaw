@@ -12,6 +12,10 @@ OpenClaw replaced a broad backwards-compatibility layer with a modern plugin
 architecture built from small, focused imports. If your plugin predates that
 change, this guide gets it onto the current contracts.
 
+The [next-major SQLite proposal](/plugins/sdk-migration/next-major-sqlite) documents
+draft removals and the remaining bundled migration blockers. It requires an
+explicit SDK-major decision before release.
+
 ## What changed
 
 Several wide-open import surfaces used to let plugins reach almost anything

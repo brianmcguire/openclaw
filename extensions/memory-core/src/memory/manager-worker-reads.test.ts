@@ -4,13 +4,11 @@ import { DatabaseSync } from "node:sqlite";
 import { setImmediate } from "node:timers/promises";
 import { createDeferred } from "openclaw/plugin-sdk/extension-shared";
 import { readTranscriptStatsBatchReadOnlySync } from "openclaw/plugin-sdk/memory-core-host-engine-sessions";
-import {
-  openOpenClawAgentDatabase,
-  resolveOpenClawAgentSqlitePath,
-} from "openclaw/plugin-sdk/sqlite-runtime";
+import { resolveOpenClawAgentSqlitePath } from "openclaw/plugin-sdk/sqlite-runtime";
 import {
   closeOpenClawAgentDatabasesForTest,
   observeHostDataSql,
+  openOpenClawAgentDatabase,
 } from "openclaw/plugin-sdk/sqlite-runtime-testing";
 import { describe, expect, it, vi } from "vitest";
 import * as cpuRuntime from "./manager-cpu-worker-runtime.js";

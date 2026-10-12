@@ -1,11 +1,7 @@
 import { randomUUID } from "node:crypto";
-import type {
-  SessionGitHubPublicationResult,
-  SessionGitHubStatusResult,
-} from "../../packages/gateway-protocol/src/schema/session-github-publication.js";
+import type { SessionGitHubPublicationResult } from "../../packages/gateway-protocol/src/schema/session-github-publication.js";
 import { acquireWorktreeRunLease } from "../agents/worktrees/run-lease.js";
 import type { OpenClawConfig } from "../config/types.openclaw.js";
-import { warnPluginSdkDeprecation } from "../plugins/sdk-deprecation.js";
 import { getOrCreatePromise } from "../shared/lazy-promise.js";
 import type { GitHubPublicationRow as PublicationRow } from "../state/github-publication-read.types.js";
 import { readGitHubPublicationSessionLifecycleInWorker } from "../state/github-publication-session-lifecycles.js";
@@ -21,9 +17,7 @@ import {
 } from "./github-publication-availability.js";
 import {
   createGitHubPublicationCoordinatorMethods,
-  type GitHubPublicationClaimRequest,
   type GitHubPublicationClaimRequestV2,
-  type GitHubPublicationSessionRequest,
 } from "./github-publication-coordinator-methods.js";
 import { GitHubPublicationAuthorityLostError } from "./github-publication-execution-identity.js";
 import {
@@ -435,18 +429,6 @@ export function createGitHubPublicationCoordinator(params: {
   return {
     ...methods,
     ...personal,
-    /** @deprecated Use requestForClaimV2; removed in the next Plugin SDK major. */
-    requestForClaim: async (
-      _request: GitHubPublicationClaimRequest,
-    ): Promise<SessionGitHubPublicationResult> => {
-      warnPluginSdkDeprecation({
-        family: "github-publication",
-        compatibility: "This method no longer performs publication work; use its replacement.",
-        method: "requestForClaim",
-        replacement: "requestForClaimV2",
-      });
-      throw new Error("Use requestForClaimV2 with a host-prepared requester.");
-    },
     requestForClaimV2: async (request: GitHubPublicationClaimRequestV2) => {
       if (!isGitHubPublicationRequesterV2(request.requester)) {
         throw new Error("GitHub publication requires a host-prepared V2 requester.");
@@ -469,30 +451,8 @@ export function createGitHubPublicationCoordinator(params: {
       );
       await repository.prepareClaimWorkspace(claim);
     },
-    /** @deprecated Use deferClaimPreparationAsync; removed in the next Plugin SDK major. */
-    deferClaimPreparation(_claim: WorkerSessionTurnClaim): void {
-      warnPluginSdkDeprecation({
-        family: "github-publication",
-        compatibility: "This method no longer performs publication work; use its replacement.",
-        method: "deferClaimPreparation",
-        replacement: "deferClaimPreparationAsync",
-      });
-      throw new Error("Use deferClaimPreparationAsync and await completion.");
-    },
     async deferClaimPreparationAsync(claim: WorkerSessionTurnClaim) {
       await runGitHubPublicationMaintenanceAsync({ operation: "deferClaim", claim }, assertCurrent);
-    },
-    /** @deprecated Use requestForSessionV2; removed in the next Plugin SDK major. */
-    async requestForSession(
-      _input: GitHubPublicationSessionRequest,
-    ): Promise<SessionGitHubPublicationResult> {
-      warnPluginSdkDeprecation({
-        family: "github-publication",
-        compatibility: "This method no longer performs publication work; use its replacement.",
-        method: "requestForSession",
-        replacement: "requestForSessionV2",
-      });
-      throw new Error("Use requestForSessionV2 with a host-prepared requester.");
     },
     async requestForSessionV2(input: Parameters<typeof methods.requestForSessionV2>[0]) {
       if (!isGitHubPublicationRequesterV2(input.requester)) {
@@ -512,18 +472,6 @@ export function createGitHubPublicationCoordinator(params: {
         ? repository.requestForSessionV2(input)
         : methods.requestForSessionV2(input);
     },
-    /** @deprecated Use requestPersonalForSessionV2; removed in the next Plugin SDK major. */
-    async requestPersonalForSession(
-      ..._args: Parameters<typeof personal.requestPersonalForSession>
-    ): Promise<SessionGitHubPublicationResult> {
-      warnPluginSdkDeprecation({
-        family: "github-publication",
-        compatibility: "This method no longer performs publication work; use its replacement.",
-        method: "requestPersonalForSession",
-        replacement: "requestPersonalForSessionV2",
-      });
-      throw new Error("Use requestPersonalForSessionV2 with a host-prepared action.");
-    },
     async requestPersonalForSessionV2(
       ...args: Parameters<typeof personal.requestPersonalForSessionV2>
     ) {
@@ -538,18 +486,6 @@ export function createGitHubPublicationCoordinator(params: {
       return (await repository.latestShared(...args)) ?? (await methods.latestShared(...args));
     },
     preparePersonalStatus: repository.preparePersonalStatus,
-    /** @deprecated Use personalStatusAsync and await completion. */
-    personalStatus(
-      ..._args: Parameters<typeof repository.personalStatusAsync>
-    ): SessionGitHubStatusResult {
-      warnPluginSdkDeprecation({
-        family: "github-publication",
-        compatibility: "This method no longer performs publication work; use its replacement.",
-        method: "personalStatus",
-        replacement: "personalStatusAsync",
-      });
-      throw new Error("Use personalStatusAsync and await completion.");
-    },
     async personalStatusAsync(...args: Parameters<typeof repository.personalStatusAsync>) {
       return (
         (await repository.personalStatusAsync(...args)) ??
@@ -558,18 +494,6 @@ export function createGitHubPublicationCoordinator(params: {
     },
     async personalPending(...args: Parameters<typeof personal.personalPending>) {
       return (await repository.personalPending(...args)) ?? personal.personalPending(...args);
-    },
-    /** @deprecated Use confirmPersonalV2; removed in the next Plugin SDK major. */
-    confirmPersonal(
-      ..._args: Parameters<typeof personal.confirmPersonal>
-    ): Promise<SessionGitHubPublicationResult> {
-      warnPluginSdkDeprecation({
-        family: "github-publication",
-        compatibility: "This method no longer performs publication work; use its replacement.",
-        method: "confirmPersonal",
-        replacement: "confirmPersonalV2",
-      });
-      throw new Error("Use confirmPersonalV2 with a host-prepared action.");
     },
     async confirmPersonalV2(...args: Parameters<typeof personal.confirmPersonalV2>) {
       return (await repository.hasRequestAsync(args[0].requestId))
@@ -597,34 +521,9 @@ export function createGitHubPublicationCoordinator(params: {
         );
       }
     },
-    /** @deprecated Use deferOrphanedRequestsAsync; removed in the next Plugin SDK major. */
-    deferOrphanedRequests(): void {
-      warnPluginSdkDeprecation({
-        family: "github-publication",
-        compatibility: "This method no longer performs publication work; use its replacement.",
-        method: "deferOrphanedRequests",
-        replacement: "deferOrphanedRequestsAsync",
-      });
-      throw new Error("Use deferOrphanedRequestsAsync and await completion.");
-    },
     async deferOrphanedRequestsAsync(): Promise<void> {
       await methods.deferOrphanedRequestsAsync();
       await repository.deferOrphanedRequestsAsync();
-    },
-    /** @deprecated Use listUnreportedResultsAsync; removed in the next Plugin SDK major. */
-    listUnreportedResults(): Array<{
-      sessionId: string;
-      sessionKey: string;
-      agentId: string;
-      result: SessionGitHubPublicationResult;
-    }> {
-      warnPluginSdkDeprecation({
-        family: "github-publication",
-        compatibility: "This method no longer performs publication work; use its replacement.",
-        method: "listUnreportedResults",
-        replacement: "listUnreportedResultsAsync",
-      });
-      throw new Error("Use listUnreportedResultsAsync and await completion.");
     },
     async listUnreportedResultsAsync() {
       return [
@@ -632,28 +531,8 @@ export function createGitHubPublicationCoordinator(params: {
         ...(await repository.listUnreportedResultsAsync()),
       ];
     },
-    /** @deprecated Use readAsync and await completion. */
-    read(_requestId: string): SessionGitHubPublicationResult | undefined {
-      warnPluginSdkDeprecation({
-        family: "github-publication",
-        compatibility: "This method no longer performs publication work; use its replacement.",
-        method: "read",
-        replacement: "readAsync",
-      });
-      throw new Error("Use readAsync and await completion.");
-    },
     async readAsync(requestId: string) {
       return (await repository.readAsync(requestId)) ?? methods.readAsync(requestId);
-    },
-    /** @deprecated Use markReportedAsync; removed in the next Plugin SDK major. */
-    markReported(_requestId: string): void {
-      warnPluginSdkDeprecation({
-        family: "github-publication",
-        compatibility: "This method no longer performs publication work; use its replacement.",
-        method: "markReported",
-        replacement: "markReportedAsync",
-      });
-      throw new Error("Use markReportedAsync and await completion.");
     },
     async markReportedAsync(requestId: string) {
       await runGitHubPublicationMaintenanceAsync({ operation: "report", requestId }, assertCurrent);

@@ -275,7 +275,7 @@ describe("agent harness workspace readiness and boundaries", () => {
     });
     const host = createAgentHarnessHostCapabilities({ attempt, pluginId: "copilot" });
     try {
-      const tools = host.capabilities.createToolSurface?.({}) ?? [];
+      const tools = await host.capabilities.createToolSurfaceAsync!({});
       expect(tools.map((tool) => tool.name)).toEqual(
         expect.arrayContaining(["read", "exec", "process"]),
       );
@@ -319,7 +319,7 @@ describe("agent harness workspace readiness and boundaries", () => {
     });
     const host = createAgentHarnessHostCapabilities({ attempt, pluginId: "codex" });
     try {
-      const tools = host.capabilities.createToolSurface?.({ sandbox: undefined }) ?? [];
+      const tools = await host.capabilities.createToolSurfaceAsync!({ sandbox: undefined });
       expect(tools.some((tool) => tool.name === "exec" || tool.name === "process")).toBe(false);
       await tools
         .find((tool) => tool.name === "write")!
@@ -329,7 +329,7 @@ describe("agent harness workspace readiness and boundaries", () => {
       ).resolves.toBeDefined();
       expect(fs.readFileSync(path.join(root, "inside.txt"), "utf8")).toBe("inside");
       expect(runShellCommand).not.toHaveBeenCalled();
-      const noCore = host.capabilities.createToolSurface?.({ includeCoreTools: false }) ?? [];
+      const noCore = await host.capabilities.createToolSurfaceAsync!({ includeCoreTools: false });
       expect(
         noCore.some((tool) => ["read", "write", "exec", "process", "message"].includes(tool.name)),
       ).toBe(false);
@@ -367,14 +367,13 @@ describe("agent harness workspace readiness and boundaries", () => {
           includePluginTools: true,
         },
       ]) {
-        const tools =
-          host.capabilities.createToolSurface?.({
-            workspaceDir: parent,
-            cwd: parent,
-            requireWorkspaceOnly: undefined,
-            exec: { mode: "full" },
-            toolConstructionPlan: plan,
-          }) ?? [];
+        const tools = await host.capabilities.createToolSurfaceAsync!({
+          workspaceDir: parent,
+          cwd: parent,
+          requireWorkspaceOnly: undefined,
+          exec: { mode: "full" },
+          toolConstructionPlan: plan,
+        });
         expect(tools.map((tool) => tool.name)).toEqual(
           expect.arrayContaining(["read", "write", "edit"]),
         );
@@ -394,11 +393,11 @@ describe("agent harness workspace readiness and boundaries", () => {
           ).rejects.toThrow();
         }
       }
-      expect(() =>
-        host.capabilities.createToolSurface?.({
+      await expect(
+        host.capabilities.createToolSurfaceAsync!({
           sessionPermissionPolicy: { root: parent, mode: "full" },
         }),
-      ).toThrow("escapes the captured required workspace");
+      ).rejects.toThrow("escapes the captured required workspace");
       expect(fs.readFileSync(path.join(parent, "outside.txt"), "utf8")).toBe("outside");
     } finally {
       host.close();
@@ -420,10 +419,9 @@ describe("agent harness workspace readiness and boundaries", () => {
     });
     const host = createAgentHarnessHostCapabilities({ attempt, pluginId: "codex" });
     try {
-      const tools =
-        host.capabilities.createToolSurface?.({
-          sessionPermissionPolicy: { root: subset, mode: "read-only" },
-        }) ?? [];
+      const tools = await host.capabilities.createToolSurfaceAsync!({
+        sessionPermissionPolicy: { root: subset, mode: "read-only" },
+      });
       const read = tools.find((tool) => tool.name === "read")!;
       expect(tools.some((tool) => tool.name === "write" || tool.name === "exec")).toBe(false);
       await expect(

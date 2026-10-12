@@ -1,7 +1,7 @@
 import type { OpenClawConfig } from "openclaw/plugin-sdk/memory-core-host-engine-foundation";
 import { resetPluginStateStoreForTests } from "openclaw/plugin-sdk/plugin-state-test-runtime";
 import { patchSessionEntry } from "openclaw/plugin-sdk/session-store-runtime";
-import { openOpenClawAgentDatabase } from "openclaw/plugin-sdk/sqlite-runtime";
+import { openOpenClawAgentDatabase } from "openclaw/plugin-sdk/sqlite-runtime-testing";
 import { createOpenClawTestState } from "openclaw/plugin-sdk/test-state";
 import { configureMemoryCoreDreamingStateForTests } from "./test-helpers.js";
 

@@ -1,23 +1,16 @@
 /** Production-private native session coordination for official harness plugins. */
 export {
-  createNativeSessionBindingLifecycle,
   createNativeSessionBindingLifecycleV2,
   type NativeSessionBindingLeaseOptions,
-  type NativeSessionBindingStateStore,
   type NativeSessionBindingStateStoreV2,
 } from "../agents/harness/native-session/binding-lifecycle.js";
 export {
-  captureNativeSessionGenerationAuthority,
-  reclaimNativeSessionGeneration,
-  resolveNativeSessionBinding,
-  type NativeSessionGenerationOperations,
   type NativeSessionGenerationReclaimPlan,
   type NativeSessionGenerationAdoptionResult,
 } from "../agents/harness/native-session/binding-generation.js";
 export {
   prepareNativeSessionGenerationAuthority,
   reclaimNativeSessionGenerationWithAuthority,
-  resolveNativeSessionBindingWithAuthority,
   resolveNativeSessionBindingWithAuthorityV2,
   type NativeSessionGenerationOperationsV2,
 } from "../agents/harness/native-session/binding-generation-authority.js";

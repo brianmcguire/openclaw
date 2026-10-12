@@ -33,7 +33,6 @@ export const SQLITE_RUNTIME_COMPAT_RECORDS = [
       "TypeScript @deprecated annotations and one shared warning per plugin identity and capability family on actual legacy use; unscoped consumers share a bounded SDK warning",
     ],
     tests: [
-      "src/plugin-sdk/sqlite-runtime.legacy-compat.test.ts",
       "src/plugin-sdk/sqlite-runtime.preparation-compat.test.ts",
       "src/state/openclaw-agent-worker-store.test.ts",
     ],

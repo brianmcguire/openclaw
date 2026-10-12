@@ -111,31 +111,35 @@ async function withAdmittedInput(
       storePath: path.join(state.agentDir("main"), "openclaw-agent.sqlite"),
     };
     await upsertSessionEntryCore(scope, { sessionId: scope.sessionId, updatedAt: 1 });
-    const source = SessionManager.open(scope, state.workspaceDir);
-    source.appendMessage({ role: "user", content: "Earlier topic", timestamp: 1 });
-    source.appendMessage(
+    const source = await SessionManager.openAsync(scope, state.workspaceDir);
+    await source.appendMessageAsync({ role: "user", content: "Earlier topic", timestamp: 1 });
+    await source.appendMessageAsync(
       makeAgentAssistantMessage({
         content: [{ type: "text", text: "Earlier reply" }],
         stopReason: "stop",
       }),
     );
-    const retained = source.appendMessage(makeUserMessage("Keep the Cedar project receipt.", 3));
-    source.appendMessage(
+    const retained = await source.appendMessageAsync(
+      makeUserMessage("Keep the Cedar project receipt.", 3),
+    );
+    await source.appendMessageAsync(
       makeAgentAssistantMessage({
         content: [{ type: "text", text: "Cedar receipt is maple-17." }],
         stopReason: "stop",
       }),
     );
     if (compacted) {
-      source.appendCompaction("Earlier conversation summary", retained, 500);
+      await source.appendCompactionAsync("Earlier conversation summary", retained, 500);
       const excluded = {
         role: "user" as const,
         content: "Excluded diagnostic payload",
         timestamp: 4,
         excludeFromContext: true as const,
       };
-      source.appendMessage(excluded);
-      source.appendCustomEntry("openclaw:bootstrap-context:full", { revision: "fixture" });
+      await source.appendMessageAsync(excluded);
+      await source.appendCustomEntryAsync("openclaw:bootstrap-context:full", {
+        revision: "fixture",
+      });
     }
     await waitForSessionTranscriptProjection(scope);
     const priorContext = source.buildSessionContext();
@@ -189,21 +193,25 @@ it("isolates a required checkpoint while preserving compacted admitted input", a
       if (first.type === "message" && first.message.role === "user") {
         first.message.content = "Checkpoint-only edit";
       }
-      checkpoint.sessionManager.branch(first.id);
+      await checkpoint.sessionManager.branchAsync(first.id);
     }
-    const instruction = checkpoint.sessionManager.appendMessage(
+    const instruction = await checkpoint.sessionManager.appendMessageAsync(
       makeUserMessage("Checkpoint instruction", 5),
     );
-    checkpoint.sessionManager.appendMessage(
+    await checkpoint.sessionManager.appendMessageAsync(
       makeAgentAssistantMessage({
         content: [{ type: "text", text: "NO_REPLY" }],
         stopReason: "stop",
       }),
     );
-    checkpoint.sessionManager.appendCompaction("Checkpoint-only summary", instruction, 100);
+    await checkpoint.sessionManager.appendCompactionAsync(
+      "Checkpoint-only summary",
+      instruction,
+      100,
+    );
     expect(loadTranscriptEventsSync(scope)).toEqual(before);
     expect(readActiveTranscriptEntryAnchor(admission)).toEqual(anchor);
-    expect(SessionManager.open(scope).getBranch().at(-1)?.id).toBe(admission.entryId);
+    expect((await SessionManager.openAsync(scope)).getBranch().at(-1)?.id).toBe(admission.entryId);
   });
 });
 
@@ -259,7 +267,7 @@ it("rejects a partial bounded checkpoint instead of silently starting with less 
       createSessionTranscriptHeader({ cwd: state.workspaceDir, sessionId: scope.sessionId }),
     ]);
     for (let i = 0; i <= MAX_VISIBLE_MESSAGE_MAX_MESSAGES; i += 1) {
-      seed.appendMessage({ role: "user", content: `Prior record ${i}`, timestamp: i });
+      await seed.appendMessageAsync({ role: "user", content: `Prior record ${i}`, timestamp: i });
     }
     await replaceTranscriptEvents(scope, [seed.getHeader(), ...seed.getEntries()]);
     const recorder = createUserTurnTranscriptRecorder({

@@ -9,7 +9,6 @@ import { z } from "zod";
 import type { SessionCatalogTranscriptItem } from "../../packages/gateway-protocol/src/schema/sessions-catalog.js";
 import { readTranscriptSenderIdentity } from "../chat/sender-identity.js";
 import type { SessionTranscriptReadScope } from "../config/sessions/session-accessor.sqlite-contract.js";
-import { readSessionTranscriptHistoryEventPage } from "../config/sessions/session-accessor.sqlite-history-events.js";
 import { SessionTranscriptColdError } from "../config/sessions/session-cold-storage-state.js";
 import { withSessionEntryReadOnlyInWorker } from "../config/sessions/session-entry-read-runtime.js";
 import { readSessionHistoryPageInWorker } from "../config/sessions/session-history-worker-runtime.js";
@@ -337,48 +336,13 @@ async function readCatalogPageFromEntry(
   return { items, ...(nextCursor ? { nextCursor } : {}) };
 }
 
-/** Legacy SDK title contract; bundled callers use the worker-backed async replacement. */
-export function readLegacySessionTranscriptCatalogTitle(params: {
+/** Matches title precedence without opening SQLite on the Gateway thread. */
+export async function readSessionTranscriptCatalogTitleAsync(params: {
   agentId: string;
   sessionKey: string;
   storePath?: string;
   entry: SessionEntry;
-}): string | undefined {
-  const title = deriveSessionTitle(params.entry);
-  if (title) {
-    return boundedText(title).text;
-  }
-  const scope = {
-    ...params,
-    storePath: resolveSessionStorePathForScope(params),
-    sessionId: params.entry.sessionId,
-    sessionEntry: params.entry,
-  };
-  try {
-    const snapshot = readSessionTranscriptHistoryEventPage(scope, {
-      offset: 0,
-      maxMessages: 0,
-      readOnly: true,
-    });
-    const page = readSessionTranscriptHistoryEventPage(scope, {
-      offset: Math.max(0, snapshot.totalMessages - 100),
-      maxMessages: 100,
-      maxBytes: MAX_CATALOG_READ_BYTES,
-      readOnly: true,
-    });
-    return deriveCatalogHistoryTitle(params.entry, page);
-  } catch (error) {
-    if (!(error instanceof SessionTranscriptColdError)) {
-      throw error;
-    }
-  }
-  return undefined;
-}
-
-/** Matches title precedence without opening SQLite on the Gateway thread. */
-export async function readSessionTranscriptCatalogTitleAsync(
-  params: Parameters<typeof readLegacySessionTranscriptCatalogTitle>[0],
-): Promise<string | undefined> {
+}): Promise<string | undefined> {
   const title = deriveSessionTitle(params.entry);
   if (title) {
     return boundedText(title).text;

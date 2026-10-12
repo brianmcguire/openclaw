@@ -23,10 +23,8 @@ export const MENTION_INBOX_COMPAT_RECORD = {
   ],
   tests: [
     "src/plugins/compat/registry.test.ts",
-    "src/plugins/compat/mention-inbox-deprecation.test.ts",
     "src/plugin-sdk/gateway-mention-inbox-compat.test.ts",
     "src/gateway/mention-inbox.test.ts",
-    "src/gateway/mention-inbox.compat.test.ts",
   ],
   releaseNote:
     "Mention Inbox reads, dismissals, recording, and invalidation expose awaited worker-backed methods. Legacy recording now queues the same asynchronous worker operation after any enclosing commit; await recordCommittedInputAsync for completion. Other synchronous plugin methods retain their existing completion timing. Stored data, retention, and update behavior are unchanged.",

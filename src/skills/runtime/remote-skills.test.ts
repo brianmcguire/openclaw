@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createSyntheticSourceInfo } from "../../agents/sessions/source-info.js";
 import { resetLogger, setLoggerOverride } from "../../logging/logger.js";
 import { loggingState } from "../../logging/state.js";
-import { buildWorkspaceSkillCommandSpecs } from "../discovery/command-specs.js";
+import { assembleWorkspaceSkillCommandSpecs } from "../discovery/command-specs.js";
 import { buildWorkspaceSkillStatus } from "../discovery/status.js";
 import { loadWorkspaceSkills } from "../loading/workspace-skill-loader.js";
 import { buildSkillSnapshot } from "../loading/workspace-skill-prompt.js";
@@ -238,7 +238,7 @@ describe("node-hosted skill snapshots", () => {
     });
     const entries = mergeRemoteNodeSkillEntries([], { canExec: true });
 
-    const [command] = buildWorkspaceSkillCommandSpecs("/workspace", { entries });
+    const [command] = assembleWorkspaceSkillCommandSpecs("/workspace", entries);
     expect(command?.skillName).toBe("dispatch-skill");
     expect(command?.dispatch).toBeUndefined();
   });

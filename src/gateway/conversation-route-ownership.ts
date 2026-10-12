@@ -6,7 +6,10 @@ import {
   inspectRuntimeConversationBindingRoute,
 } from "../channels/plugins/binding-routing.js";
 import { getLoadedChannelPlugin, normalizeChannelId } from "../channels/plugins/index.js";
-import type { ChannelMessagingAdapter } from "../channels/plugins/types.core.js";
+import type {
+  ChannelConversationRouteOwnerResolver,
+  ChannelMessagingAdapter,
+} from "../channels/plugins/types.core.js";
 import { listRouteBindings } from "../config/bindings.js";
 import { assertConversationAuthority } from "../config/sessions/conversation-authority.js";
 import type { ConversationAuthority } from "../config/sessions/conversation-authority.types.js";
@@ -22,11 +25,9 @@ import type { OpenClawConfig } from "../config/types.openclaw.js";
 import { PlatformMessageNotDispatchedError } from "../infra/outbound/deliver-types.js";
 import {
   type inspectSessionBindingByConversation,
-  inspectSessionBindingsByConversations,
   prepareSessionBindingInspections,
 } from "../infra/outbound/session-binding-service.js";
 import { getGlobalPluginRegistry } from "../plugins/hook-runner-global.js";
-import { warnPluginSdkDeprecation } from "../plugins/sdk-deprecation.js";
 import { normalizeAccountId } from "../routing/account-id.js";
 import { normalizeRouteBindingId } from "../routing/binding-scope.js";
 import { peerKindMatches } from "../routing/peer-kind-match.js";
@@ -55,9 +56,7 @@ function hasActivePluginClaimOwner(pluginId: string): boolean {
   );
 }
 
-type PluginRouteOwnerResolver = NonNullable<
-  ChannelMessagingAdapter["resolveConversationRouteOwner"]
->;
+type PluginRouteOwnerResolver = ChannelConversationRouteOwnerResolver;
 function pluginRouteOwnerInput(
   config: OpenClawConfig,
   conversation: ConversationRouteCandidate,
@@ -81,24 +80,11 @@ function resolvePluginRouteOwner(
   conversation: ConversationRouteCandidate,
   preparedResolver?: PluginRouteOwnerResolver,
 ): RouteOwnerResolution | undefined {
-  const channelId = normalizeChannelId(conversation.channel);
-  const resolver =
-    preparedResolver ??
-    (channelId
-      ? getLoadedChannelPlugin(channelId)?.messaging?.resolveConversationRouteOwner
-      : undefined);
-  if (!resolver) {
+  if (!preparedResolver) {
     return undefined;
   }
-  if (!preparedResolver) {
-    warnPluginSdkDeprecation({
-      family: "conversation-route-ownership",
-      method: "ChannelMessagingAdapter.resolveConversationRouteOwner",
-      replacement: "ChannelMessagingAdapter.prepareConversationRouteOwnersAsync",
-    });
-  }
   try {
-    const owner = resolver(pluginRouteOwnerInput(config, conversation));
+    const owner = preparedResolver(pluginRouteOwnerInput(config, conversation));
     if (owner === undefined) {
       return undefined;
     }
@@ -293,36 +279,6 @@ export async function prepareConversationRouteEligibilitiesForAgent(params: {
       }
       return { channel, plugin };
     });
-    for (const [index, input] of inputs.entries()) {
-      const messaging = plugins[index]?.plugin?.messaging;
-      if (
-        messaging?.prepareConversationRouteOwners &&
-        !messaging.prepareConversationRouteOwnersAsync
-      ) {
-        warnPluginSdkDeprecation({
-          family: "conversation-route-ownership",
-          method: "ChannelMessagingAdapter.prepareConversationRouteOwners",
-          replacement: "ChannelMessagingAdapter.prepareConversationRouteOwnersAsync",
-        });
-        let preparing = true;
-        try {
-          const [resolver] = messaging.prepareConversationRouteOwners(
-            [pluginRouteOwnerInput(params.config, input.conversation)],
-            (refs) => {
-              if (!preparing) {
-                throw new Error("Conversation route preparation is no longer active");
-              }
-              return inspectSessionBindingsByConversations(refs);
-            },
-          );
-          if (resolver) {
-            resolvers.set(index, resolver);
-          }
-        } finally {
-          preparing = false;
-        }
-      }
-    }
     for (const [prepare, indexes] of groups) {
       let preparing = true;
       let selected: readonly PluginRouteOwnerResolver[];

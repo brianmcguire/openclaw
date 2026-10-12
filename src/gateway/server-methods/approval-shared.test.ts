@@ -183,7 +183,7 @@ describe("handlePendingApprovalRequest", () => {
     await manager.register(record, 60_000);
     const responseSent = createDeferredCore();
     const respond = vi.fn(() => responseSent.resolve());
-    const publishRequested = vi.fn(() => 1);
+    const publishRequestedAsync = vi.fn(async () => 1);
     const getApprovalClientConnIds = vi.fn(() => new Set<string>());
     const requestPromise = handlePendingApprovalRequest({
       manager,
@@ -193,7 +193,7 @@ describe("handlePendingApprovalRequest", () => {
         broadcast: vi.fn(),
         hasExecApprovalClients: () => route === "client",
         ...(route === "subscriber"
-          ? { approvalEvents: { publishRequested, publishResolved: vi.fn() } }
+          ? { approvalEvents: { publishRequestedAsync, publishResolved: vi.fn() } }
           : {}),
         ...(route === "plugin" ? { broadcastToConnIds: vi.fn(), getApprovalClientConnIds } : {}),
       } as unknown as GatewayRequestContext,
@@ -211,7 +211,7 @@ describe("handlePendingApprovalRequest", () => {
       if (route === "client") {
         expect(hasApprovalTurnSourceRouteMock).not.toHaveBeenCalled();
       } else if (route === "subscriber") {
-        expect(publishRequested).toHaveBeenCalledWith(
+        expect(publishRequestedAsync).toHaveBeenCalledWith(
           "exec",
           expect.objectContaining({ id: record.id }),
         );
@@ -451,7 +451,6 @@ describe("handlePendingApprovalRequest", () => {
     await manager.register(record, 60_000);
     const publishing = createDeferredCore();
     const publication = createDeferredCore<number>();
-    const publishRequested = vi.fn(() => 0);
     const respond = vi.fn();
     const deliverRequest = vi.fn(() => true);
     const requestPromise = handlePendingApprovalRequest({
@@ -461,7 +460,6 @@ describe("handlePendingApprovalRequest", () => {
       context: {
         broadcast: vi.fn(),
         approvalEvents: {
-          publishRequested,
           publishRequestedAsync: () => {
             publishing.resolve();
             return publication.promise;
@@ -478,7 +476,6 @@ describe("handlePendingApprovalRequest", () => {
     await manager.resolve(record.id, "deny", "control-ui");
     publication.resolve(0);
     await requestPromise;
-    expect(publishRequested).not.toHaveBeenCalled();
     expect(deliverRequest).not.toHaveBeenCalled();
     expect(respond).toHaveBeenCalledExactlyOnceWith(
       true,
@@ -653,7 +650,7 @@ describe("handlePendingApprovalRequest", () => {
     const respond = vi.fn();
     const broadcast = vi.fn();
     const deliverRequest = vi.fn(() => true);
-    const publishRequested = vi.fn(() => 1);
+    const publishRequestedAsync = vi.fn(async () => 1);
 
     const requestPromise = handlePendingApprovalRequest({
       manager,
@@ -662,7 +659,7 @@ describe("handlePendingApprovalRequest", () => {
       context: {
         broadcast,
         hasExecApprovalClients: () => true,
-        approvalEvents: { publishRequested, publishResolved: vi.fn() },
+        approvalEvents: { publishRequestedAsync, publishResolved: vi.fn() },
       } as unknown as GatewayRequestContext,
       requestEventName: "exec.approval.requested",
       requestEvent: requestedEvent(record),
@@ -678,7 +675,7 @@ describe("handlePendingApprovalRequest", () => {
       expect.objectContaining({ dropIfSlow: true }),
     );
     expect(deliverRequest).not.toHaveBeenCalled();
-    expect(publishRequested).not.toHaveBeenCalled();
+    expect(publishRequestedAsync).not.toHaveBeenCalled();
     expect(hasApprovalTurnSourceRouteMock).not.toHaveBeenCalled();
     expect((await manager.getSnapshot(record.id))?.resolvedAtMs).toBeUndefined();
 
@@ -706,7 +703,7 @@ describe("handlePendingApprovalRequest", () => {
     const respond = vi.fn();
     const afterDecision = vi.fn();
     const deliverRequest = vi.fn(() => true);
-    const publishRequested = vi.fn(() => 1);
+    const publishRequestedAsync = vi.fn(async () => 1);
 
     await handlePendingApprovalRequest({
       manager,
@@ -715,7 +712,7 @@ describe("handlePendingApprovalRequest", () => {
       context: {
         broadcast: vi.fn(),
         hasExecApprovalClients: () => false,
-        approvalEvents: { publishRequested, publishResolved: vi.fn() },
+        approvalEvents: { publishRequestedAsync, publishResolved: vi.fn() },
       } as unknown as GatewayRequestContext,
       requestEventName: "exec.approval.requested",
       requestEvent: requestedEvent(record),
@@ -727,7 +724,7 @@ describe("handlePendingApprovalRequest", () => {
 
     expect(afterDecision).not.toHaveBeenCalled();
     expect(deliverRequest).not.toHaveBeenCalled();
-    expect(publishRequested).not.toHaveBeenCalled();
+    expect(publishRequestedAsync).not.toHaveBeenCalled();
     expect(hasApprovalTurnSourceRouteMock).not.toHaveBeenCalled();
     expect(await manager.getSnapshot(record.id)).toMatchObject({
       resolvedBy: "no-approval-route",

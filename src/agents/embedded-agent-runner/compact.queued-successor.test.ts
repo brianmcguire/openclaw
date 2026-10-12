@@ -93,12 +93,12 @@ const backendCompactParams = (abortSignal?: AbortSignal) => ({
   agentHarnessId: "openclaw",
 });
 
-function createBackendAppend(firstKeptEntryId: string) {
+async function createBackendAppend(firstKeptEntryId: string) {
   // Open exactly the portable target the backend receives; the test supplies no fence.
-  const manager = PersistentSessionManager.open(target(), workspaceDir);
-  return () => {
+  const manager = await PersistentSessionManager.openAsync(target(), workspaceDir);
+  return async () => {
     try {
-      manager.appendCompaction("backend summary", firstKeptEntryId, 120);
+      await manager.appendCompactionAsync("backend summary", firstKeptEntryId, 120);
       return { written: true as const };
     } catch (error) {
       return { written: false as const, error };
@@ -106,7 +106,7 @@ function createBackendAppend(firstKeptEntryId: string) {
   };
 }
 
-type BackendAppendOutcome = ReturnType<ReturnType<typeof createBackendAppend>>;
+type BackendAppendOutcome = Awaited<ReturnType<Awaited<ReturnType<typeof createBackendAppend>>>>;
 type TranscriptRewrite = NonNullable<ContextEngineRuntimeContext["rewriteTranscriptEntries"]>;
 
 async function withPersistentTranscriptFixture(
@@ -134,8 +134,8 @@ async function withPersistentTranscriptFixture(
     return manager;
   });
   try {
-    const manager = PersistentSessionManager.open(target(), workspaceDir);
-    const entryId = manager.appendMessage({
+    const manager = await PersistentSessionManager.openAsync(target(), workspaceDir);
+    const entryId = await manager.appendMessageAsync({
       role: "user",
       content: "original history ".repeat(20),
       timestamp: 1,
@@ -504,10 +504,10 @@ describe("queued compaction successor ownership", () => {
         const release = createDeferred();
         const observed = createDeferred<BackendAppendOutcome>();
         contextEngineCompactMock.mockImplementationOnce(async () => {
-          const append = createBackendAppend(entryId);
+          const append = await createBackendAppend(entryId);
           entered.resolve();
           await release.promise;
-          const outcome = append();
+          const outcome = await append();
           observed.resolve(outcome);
           if (!outcome.written) {
             throw outcome.error;
@@ -577,7 +577,7 @@ describe("queued compaction successor ownership", () => {
       const release = createDeferred();
       let continuation: Promise<BackendAppendOutcome> | undefined;
       contextEngineCompactMock.mockImplementationOnce(async () => {
-        const append = createBackendAppend(entryId);
+        const append = await createBackendAppend(entryId);
         // Create the continuation inside the backend so it inherits the actual
         // queued context, rather than injecting a private fence from this test.
         continuation = (async () => {
@@ -611,7 +611,7 @@ describe("queued compaction successor ownership", () => {
     });
   });
 
-  it("fences a synchronous timeout-listener append while the caller remains active", async () => {
+  it("fences a timeout-listener append while the caller remains active", async () => {
     await withPersistentTranscriptFixture(async ({ entryId, transcriptBefore }) => {
       const boundedCompact = vi.mocked(safetyTimeout.compactContextEngineWithSafetyTimeout);
       const previousImplementation = boundedCompact.getMockImplementation();
@@ -639,20 +639,20 @@ describe("queued compaction successor ownership", () => {
         maintain,
       };
       resolveContextEngineMock.mockResolvedValueOnce(engine);
-      contextEngineCompactMock.mockImplementationOnce((backendParams) => {
+      contextEngineCompactMock.mockImplementationOnce(async (backendParams) => {
         const signal = backendParams.abortSignal;
         if (!signal) {
           throw new Error("Expected the real safety wrapper's composed backend signal");
         }
         backendSignal = signal;
-        const append = createBackendAppend(entryId);
+        const append = await createBackendAppend(entryId);
         // Timer dispatch owns a different async context. Retain the backend's
         // actual context without constructing any OpenClaw authority in the fixture.
         const onAbort = AsyncLocalStorage.bind(() => {
-          observed.resolve({
-            callerAborted: caller.signal.aborted,
-            queuedSettled,
-            outcome: append(),
+          const callerAborted = caller.signal.aborted;
+          const settledAtAbort = queuedSettled;
+          void append().then((outcome) => {
+            observed.resolve({ callerAborted, queuedSettled: settledAtAbort, outcome });
           });
         });
         signal.addEventListener("abort", onAbort, { once: true });

@@ -3,14 +3,14 @@ import type { ChannelId } from "../channels/plugins/types.public.js";
 import {
   resolveCommandAuthorization,
   resolveCommandAuthorizationAsync,
-  resolveStoredModelOverride,
+  resolveStoredModelOverrideAsync,
   type CommandAuthorization,
 } from "./command-auth-native.js";
 import type { GatewayRequestHandlerOptions } from "./gateway-runtime.js";
 import { resolveSessionModelRef } from "./model-session-runtime.js";
 
 describe("plugin-sdk/command-auth-native", () => {
-  it("keeps prepared host metadata outside public model resolver inputs", () => {
+  it("keeps prepared host metadata outside public model resolver inputs", async () => {
     type PublishedCatalog = NonNullable<
       Awaited<
         ReturnType<
@@ -21,7 +21,7 @@ describe("plugin-sdk/command-auth-native", () => {
     expectTypeOf<keyof PublishedCatalog>().toEqualTypeOf<
       "entries" | "pluginRegistry" | "routeVariants"
     >();
-    type StoredModelInput = Parameters<typeof resolveStoredModelOverride>[0];
+    type StoredModelInput = Parameters<typeof resolveStoredModelOverrideAsync>[0];
     expectTypeOf<keyof StoredModelInput>().toEqualTypeOf<
       | "loadSessionEntry"
       | "sessionEntry"
@@ -49,7 +49,7 @@ describe("plugin-sdk/command-auth-native", () => {
       sessionEntry: { sessionId: "sdk-model", updatedAt: 1, modelOverride: "raw" },
       ...options,
     };
-    expect(resolveStoredModelOverride(params)?.model).toBe("raw");
+    expect((await resolveStoredModelOverrideAsync(params))?.model).toBe("raw");
     expect(
       resolveSessionModelRef(
         { agents: { defaults: { model: "example/raw" } } },

@@ -145,12 +145,10 @@ export function createScopedPluginChannelRuntime(
       ...channel.session,
       updateLastRoute: (params) =>
         invokeSelectedRuntime(() =>
-          params.assertCommitAllowed
-            ? channel.session.updateLastRoute(params)
-            : channel.session.updateLastRouteWithAuthority({
-                ...params,
-                authority: { kind: "host", assertCurrent: assertRuntimeCurrent },
-              }),
+          channel.session.updateLastRouteWithAuthority({
+            ...params,
+            authority: { kind: "host", assertCurrent: assertRuntimeCurrent },
+          }),
         ),
       updateLastRouteWithAuthority: (params) => {
         assertSessionEntryPatchAuthority(params.authority);

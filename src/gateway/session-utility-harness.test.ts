@@ -115,7 +115,7 @@ describe("utility completion with an unavailable implicit harness", () => {
       })),
     });
     try {
-      startAndAddToolNotes(observer.observer);
+      await startAndAddToolNotes(observer.observer);
       await vi.advanceTimersByTimeAsync(12_000);
       await vi.dynamicImportSettled();
       await flushObserver();
@@ -138,7 +138,7 @@ describe("utility completion with an unavailable implicit harness", () => {
       );
       expect(runtimeMocks.runEmbeddedAttempt).not.toHaveBeenCalled();
     } finally {
-      observer.observer.dispose();
+      await observer.observer.disposeAsync();
     }
   });
 

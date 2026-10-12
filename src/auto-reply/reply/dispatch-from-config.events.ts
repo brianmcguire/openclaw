@@ -1,4 +1,3 @@
-import type { PluginHookReplyDispatchEvent } from "../../plugins/hook-types.js";
 import type { InternalGetReplyOptions } from "./get-reply.types.js";
 
 export type PluginBindingTranscriptOwner = {
@@ -15,18 +14,4 @@ export function admittedSessionSettingsRestrictRuntime(
     (settings?.permissionMode !== undefined && settings.permissionMode !== "full") ||
     (settings?.toolOverrides !== undefined && Object.keys(settings.toolOverrides).length > 0)
   );
-}
-
-export function createReplyDispatchEvent(
-  params: Omit<PluginHookReplyDispatchEvent, "shouldSendToolSummaries"> & {
-    shouldSendToolSummaries: () => boolean;
-    shouldSendToolSummariesAsync: () => Promise<boolean>;
-    shouldSendFullToolDetailsAsync: () => Promise<boolean>;
-  },
-): PluginHookReplyDispatchEvent {
-  const { shouldSendToolSummaries, ...event } = params;
-  return Object.defineProperty(event, "shouldSendToolSummaries", {
-    enumerable: true,
-    get: shouldSendToolSummaries,
-  }) as PluginHookReplyDispatchEvent;
 }

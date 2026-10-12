@@ -65,15 +65,10 @@ export {
 } from "../auto-reply/inbound-debounce.js";
 export {
   createDirectDmPreCryptoGuardPolicy,
-  createPreCryptoDirectDmAuthorizer,
   dispatchInboundDirectDm,
-  dispatchInboundDirectDmWithRuntime,
-  resolveInboundDirectDmAccessWithRuntime,
   type AccessGroupMembershipResolver,
-  type DirectDmCommandAuthorizationRuntime,
   type DirectDmPreCryptoGuardPolicy,
   type DirectDmPreCryptoGuardPolicyOverrides,
-  type ResolvedInboundDirectDmAccess,
 } from "../channels/direct-dm.js";
 export {
   formatAgentEnvelope,
@@ -124,10 +119,7 @@ export {
 } from "../channels/location.js";
 export type { LogFn } from "../channels/logging.js";
 export { logInboundDrop } from "../channels/logging.js";
-export {
-  resolveInboundSessionEnvelopeContext,
-  resolveInboundSessionEnvelopeContextAsync,
-} from "../channels/session-envelope.js";
+export { resolveInboundSessionEnvelopeContextAsync } from "../channels/session-envelope.js";
 export {
   classifyChannelInboundEvent,
   resolveUnmentionedGroupInboundPolicy,

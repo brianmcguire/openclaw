@@ -5,13 +5,9 @@ import {
   normalizeOutboundReplyPayload,
   type OutboundReplyPayload,
 } from "../plugin-sdk/reply-payload.js";
-import type { PluginRuntime } from "../plugins/runtime/types.js";
 import { resolveAgentRoute } from "../routing/resolve-route.js";
 import { buildChannelInboundEventContext } from "./inbound-event/context.js";
-import {
-  createChannelInboundEnvelopeBuilderAsync,
-  resolveInboundRouteEnvelopeBuilderWithRuntime,
-} from "./inbound-event/envelope.js";
+import { createChannelInboundEnvelopeBuilderAsync } from "./inbound-event/envelope.js";
 import type {
   ChannelIngressContextBinding,
   ResolvedChannelMessageIngress,
@@ -19,13 +15,7 @@ import type {
 import { createChannelReplyPipeline } from "./message/reply-pipeline.js";
 import { dispatchRoutedChannelTurn } from "./turn/lifecycle.js";
 import type { ChannelTurnPlan } from "./turn/types.js";
-export {
-  createPreCryptoDirectDmAuthorizer,
-  resolveInboundDirectDmAccessWithRuntime,
-  type AccessGroupMembershipResolver,
-  type DirectDmCommandAuthorizationRuntime,
-  type ResolvedInboundDirectDmAccess,
-} from "./direct-dm-access.js";
+export type { AccessGroupMembershipResolver } from "../plugin-sdk/access-groups.js";
 export {
   createDirectDmPreCryptoGuardPolicy,
   type DirectDmPreCryptoGuardPolicy,
@@ -197,75 +187,4 @@ function buildDirectDmTurnPlan(
         : {}),
     },
   };
-}
-
-/** @deprecated Use dispatchInboundDirectDm. Retained for released SDK runtime callbacks until the next major. */
-export async function dispatchInboundDirectDmWithRuntime(
-  params: Omit<DispatchInboundDirectDmParams, "resolveChannelIngress"> & {
-    runtime: PluginRuntime;
-  },
-): Promise<{
-  route: DirectDmRoute;
-  storePath: string;
-  ctxPayload: FinalizedMsgContext;
-}> {
-  const { route, buildEnvelope } = resolveInboundRouteEnvelopeBuilderWithRuntime({
-    cfg: params.cfg,
-    channel: params.channel,
-    accountId: params.accountId,
-    peer: params.peer,
-    runtime: params.runtime.channel,
-    sessionStore: params.cfg.session?.store,
-  });
-  const { storePath, body } = buildEnvelope({
-    channel: params.channelLabel,
-    from: params.conversationLabel,
-    body: params.rawBody,
-    timestamp: params.timestamp,
-  });
-  const ctxPayload = params.runtime.channel.reply.finalizeInboundContext({
-    Body: body,
-    BodyForAgent: params.bodyForAgent ?? params.rawBody,
-    RawBody: params.rawBody,
-    CommandBody: params.commandBody ?? params.rawBody,
-    From: params.senderAddress,
-    To: params.recipientAddress,
-    SessionKey: route.sessionKey,
-    AccountId: route.accountId ?? params.accountId,
-    ChatType: "direct",
-    ConversationLabel: params.conversationLabel,
-    SenderId: params.senderId,
-    Provider: params.provider ?? params.channel,
-    Surface: params.surface ?? params.channel,
-    MessageSid: params.messageId,
-    MessageSidFull: params.messageId,
-    Timestamp: params.timestamp,
-    CommandAuthorized: params.commandAuthorized,
-    ...(params.inboundAccessAuthorized === true
-      ? { InboundAccessAuthorized: true, ConversationRouteContextObserved: true as const }
-      : {}),
-    ConversationRoutePeerId: params.peer.id,
-    OriginatingChannel: params.originatingChannel ?? params.channel,
-    OriginatingTo: params.originatingTo ?? params.senderAddress,
-    NativeDirectUserId: params.peer.id,
-    ...params.extraContext,
-  });
-  const plan = buildDirectDmTurnPlan(params, route, ctxPayload);
-  await params.runtime.channel.inbound.run({
-    channel: params.channel,
-    accountId: route.accountId ?? params.accountId,
-    raw: ctxPayload,
-    adapter: {
-      ingest: () => ({
-        id: params.messageId,
-        timestamp: params.timestamp,
-        rawText: params.rawBody,
-        textForAgent: params.bodyForAgent,
-        textForCommands: params.commandBody,
-        raw: ctxPayload,
-      }),
-      resolveTurn: () => plan,
-    },
-  });
-  return { route, storePath, ctxPayload };
 }

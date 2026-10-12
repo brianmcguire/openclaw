@@ -1,3 +1,4 @@
+import { expectDefined } from "@openclaw/normalization-core/expect";
 import {
   createAssistantMessageEventStream,
   type AssistantMessage,
@@ -462,7 +463,6 @@ describe("AgentSession queue and next-turn lifecycle correctness", () => {
   it("retires duplicate text by exact occurrence and owning queue once", async () => {
     const { session } = await createTestSession();
     await session.steer("same queued text");
-    await session.steer("same queued text");
     await session.followUp("same queued text");
     type QueuedMessage = Parameters<AgentSession["agent"]["steer"]>[0];
     const queues = session.agent as unknown as Record<
@@ -479,7 +479,6 @@ describe("AgentSession queue and next-turn lifecycle correctness", () => {
       message: QueuedMessage;
     }) => Promise<void>;
 
-    await handleAgentEvent({ type: "message_start", message: secondSteer });
     await handleAgentEvent({ type: "message_start", message: secondSteer });
     expect(session.getSteeringMessages()).toEqual(["same queued text"]);
     expect(session.getFollowUpMessages()).toEqual(["same queued text"]);
@@ -527,7 +526,6 @@ describe("AgentSession queue and next-turn lifecycle correctness", () => {
     expect(JSON.stringify(message)).toBe(serialized);
 
     await handleAgentEvent({ type: "message_start", message });
-    await handleAgentEvent({ type: "message_start", message });
 
     expect(session.getSteeringMessages()).toEqual([]);
     expect(session.pendingMessageCount).toBe(0);
@@ -573,7 +571,10 @@ describe("AgentSession queue and next-turn lifecycle correctness", () => {
           }
         },
       });
-      const entryId = guard.appendMessage(message);
+      const entryId = expectDefined(
+        await guard.appendMessageAsync(message),
+        "Expected appended message",
+      );
       const acceptedContent = accepted[0]?.role === "user" ? accepted[0].content : undefined;
       const firstBlock = Array.isArray(acceptedContent) ? acceptedContent[0] : undefined;
       const acceptedText =

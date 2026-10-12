@@ -10,10 +10,10 @@ import {
   clearMemoryPluginState,
   registerMemoryCorpusSupplement,
 } from "openclaw/plugin-sdk/memory-host-core";
-import { openOpenClawAgentDatabase } from "openclaw/plugin-sdk/sqlite-runtime";
 import {
   closeOpenClawAgentDatabasesAsync,
   closeOpenClawAgentDatabasesForTest,
+  openOpenClawAgentDatabase,
 } from "openclaw/plugin-sdk/sqlite-runtime-testing";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { runInMemoryTestBackgroundContext } from "./memory/background-context.test-support.js";

@@ -9,7 +9,7 @@ import {
   repairRejectedThinkingReplayInSessionManager,
 } from "./thinking-replay-repair.js";
 
-type AppendMessage = Parameters<SessionManager["appendMessage"]>[0];
+type AppendMessage = Parameters<SessionManager["appendMessageAsync"]>[0];
 
 function asAppendMessage(message: unknown): AppendMessage {
   return message as AppendMessage;

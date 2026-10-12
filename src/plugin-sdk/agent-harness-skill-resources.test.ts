@@ -6,7 +6,7 @@ import "../agents/test-helpers/fast-coding-tools.js";
 import "../agents/test-helpers/fast-openclaw-tools.js";
 import { useAutoCleanupTempDirTracker } from "../../test/helpers/temp-dir.js";
 import {
-  createOpenClawCodingTools,
+  createOpenClawCodingToolsAsync,
   createOpenClawCodingToolsInternal,
 } from "../agents/agent-tools.js";
 import {
@@ -21,7 +21,7 @@ const temps = useAutoCleanupTempDirTracker(afterEach);
 describe("prepared skill resource boundary", () => {
   it("keeps prepared skill resources out of the public SDK contract", () => {
     type Sdk = typeof import("./agent-harness.js");
-    type PublicFactory = Sdk["createOpenClawCodingTools"];
+    type PublicFactory = Sdk["createOpenClawCodingToolsAsync"];
     expectTypeOf<NonNullable<Parameters<PublicFactory>[0]>>().not.toHaveProperty(
       "skillReadResources",
     );
@@ -70,7 +70,7 @@ describe("prepared skill resource boundary", () => {
         },
         skillReadResources: selection === "empty" ? [] : [preparedSkill],
       };
-      const { readTool } = expectReadWriteEditTools(createOpenClawCodingTools(options));
+      const { readTool } = expectReadWriteEditTools(await createOpenClawCodingToolsAsync(options));
       expect(
         getTextContent(await readTool.execute("public-snapshot", { path: snapshotPath })),
       ).toContain("Public snapshot instructions");

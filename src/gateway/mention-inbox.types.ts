@@ -45,13 +45,6 @@ export type MentionInbox = {
     input: UsersMentionableParams,
     profileIds: readonly string[],
   ) => Result<readonly string[], ErrorShape>;
-  /** @deprecated Await listAsync and publish its current result. Removed in the next Plugin SDK major. */
-  list: (client: GatewayClient | null) => Result<MentionsListResult, ErrorShape>;
-  /** @deprecated Await dismissAsync and publish its current result. Removed in the next Plugin SDK major. */
-  dismiss: (
-    client: GatewayClient | null,
-    ids: readonly string[],
-  ) => Result<MentionsListResult, ErrorShape>;
   listAsync: (
     client: GatewayClient | null,
     publish: (result: Result<MentionsListResult, ErrorShape>) => undefined,
@@ -61,10 +54,6 @@ export type MentionInbox = {
     ids: readonly string[],
     publish: (result: Result<MentionsListResult, ErrorShape>) => undefined,
   ) => Promise<void>;
-  /** @deprecated Queues recording; await recordCommittedInputAsync for completion. */
-  recordCommittedInput: (input: MentionCommittedInput) => void;
-  /** @deprecated Await invalidateAsync. Removed in the next Plugin SDK major. */
-  invalidate: (sessionKey?: string) => void;
   recordCommittedInputAsync: (input: MentionCommittedInput) => Promise<void>;
   invalidateAsync: (sessionKey?: string) => Promise<void>;
   dispose: () => Promise<void>;

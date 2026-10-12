@@ -1,11 +1,7 @@
 import { AsyncLocalStorage } from "node:async_hooks";
 import { DatabaseSync } from "node:sqlite";
 import { expect, it, vi } from "vitest";
-import {
-  awaitGateBeforeSettlement,
-  createDeferred,
-  withinTest,
-} from "../../test/helpers/promise.js";
+import { createDeferred, withinTest } from "../../test/helpers/promise.js";
 import { writeSessionEntry } from "../config/sessions/session-accessor.sqlite-entry-store.js";
 import { replaceSessionEntry } from "../config/sessions/session-accessor.sqlite-entry.js";
 import * as entryFacts from "../config/sessions/session-entry-read-facts.js";
@@ -198,9 +194,6 @@ it("moves observer admission, publication, terminal and companion reads off the 
       });
       const sql = observeMainThreadSql();
       try {
-        observer.handleEvent(start);
-        expect(sql.count()).toBeGreaterThan(0);
-        sql.clear();
         await observer.handleEventAsync({ ...start, runId: "worker-run" });
         expect(inventories).toBe(1);
         inventories = 0;
@@ -390,17 +383,6 @@ it("does not disclose a predecessor digest when the configured store changes wit
     );
     await replaceStore();
     advanceClock();
-    expect(() =>
-      observer.handleEvent(
-        event({
-          stream: "item",
-          data: {
-            kind: "preamble",
-            progressText: "Unowned source",
-          },
-        }),
-      ),
-    ).toThrow("Session access facts are unavailable");
     expect(await observer.getCompanionSnapshotAsync(key, "main")).toEqual({
       agentId: "main",
       notes: [],
@@ -420,77 +402,6 @@ it("does not write a dormant predecessor digest into a replacement store", async
     await observer.handleEventAsync(event({ stream: "lifecycle", data: { phase: "end" } }));
     await observer.disposeAsync();
     expect(persisted).not.toHaveBeenCalled();
-  });
-});
-
-it("joins the worker-backed persistence of a synchronously admitted digest", async () => {
-  await withObserver(async ({ observer, peer }) => {
-    observer.handleEvent(
-      event({ stream: "item", data: { kind: "preamble", progressText: "Legacy admission" } }),
-    );
-    await observer.disposeAsync();
-    expect(
-      peer
-        .prepare(
-          "SELECT json_extract(entry_json, '$.observerDigest.headline') AS headline FROM session_nodes WHERE session_key = ?",
-        )
-        .get(key),
-    ).toEqual({ headline: "Legacy admission" });
-  }, true);
-});
-
-it("fences a context-reduced dormant read before it can retire a reset successor", async ({
-  signal,
-}) => {
-  await withObserver(async ({ observer, storePath, watch, enableModel, rewriteLifecycle }) => {
-    await observer.handleEventAsync(
-      event({ stream: "item", data: { kind: "preamble", progressText: "Retained work" } }),
-    );
-    watch(false);
-    enableModel();
-    watch(true);
-    const entered = createDeferredCore();
-    const release = createDeferredCore();
-    interceptNextEntryRead(storePath, async () => {
-      entered.resolve();
-      await release.promise;
-    });
-    const terminal = event({
-      stream: "lifecycle",
-      data: { phase: "end", startedAt: 0, endedAt: 31_000 },
-    });
-    delete terminal.agentId;
-    const pending = observer.handleEventAsync(terminal);
-    const refused = expect(pending).rejects.toThrow("Session entry changed during read");
-    try {
-      await withinTest(
-        awaitGateBeforeSettlement(
-          entered.promise,
-          pending,
-          "Dormant read did not enter its retained worker",
-        ),
-        signal,
-      );
-      rewriteLifecycle();
-      observer.handleEvent(
-        event({
-          runId: "successor",
-          stream: "item",
-          data: { kind: "preamble", progressText: "Successor work" },
-        }),
-      );
-      notifyGatewaySessionReset(key, "main");
-      release.resolve();
-      await refused;
-      expect((await observer.getCompanionSnapshotAsync(key, "main")).digest).toMatchObject({
-        runId: "successor",
-        headline: "Successor work",
-        lifecycleRevision: "life-b",
-      });
-    } finally {
-      release.resolve();
-      await Promise.allSettled([pending, refused]);
-    }
   });
 });
 
@@ -524,7 +435,7 @@ it("lets the publisher finish its nested write before persisting the background 
     let disposal: Promise<void> | undefined;
     try {
       await runOpenClawAgentWriteAdmission(options, async () => {
-        harness.observer.handleEvent(
+        await harness.observer.handleEventAsync(
           event({ stream: "item", data: { kind: "preamble", progressText: "Reviewing" } }),
         );
         expect(persistDigest).toHaveBeenCalledOnce();

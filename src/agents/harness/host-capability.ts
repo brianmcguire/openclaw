@@ -14,10 +14,8 @@ import {
   getPluginRuntimeGatewayRequestScope,
   withPluginRuntimeGatewayRequestScope,
 } from "../../plugins/runtime/gateway-request-scope.js";
-import { warnPluginSdkDeprecation } from "../../plugins/sdk-deprecation.js";
 import { bindUserTurnTranscriptAnnotation } from "../../sessions/user-turn-transcript-annotation.js";
 import { getAsyncWorkSignal } from "../../shared/async-work-scope.js";
-import { loadSkillLibrarySelection } from "../../skills/library/selection.js";
 import { resolveSkillResourceCandidates } from "../../skills/runtime/resource-candidates.js";
 import type { SkillEntry } from "../../skills/types.js";
 import {
@@ -26,10 +24,7 @@ import {
   retainAdmittedRunBeforeToolCallRecovery,
 } from "../admitted-run-context.js";
 import { runBeforeToolCallHook } from "../agent-tools.before-tool-call.js";
-import {
-  createOpenClawCodingToolsInternal,
-  createOpenClawCodingToolsInternalAsync,
-} from "../agent-tools.js";
+import { createOpenClawCodingToolsInternalAsync } from "../agent-tools.js";
 import { log } from "../embedded-agent-runner/logger.js";
 import type { EmbeddedRunAttemptParams } from "../embedded-agent-runner/run/types.js";
 import { runBestEffortCallback } from "../embedded-agent-subscribe.callback.js";
@@ -494,24 +489,6 @@ export function createAgentHarnessHostCapabilities(params: {
       return buildActiveNodeContextText(requesterProfileId);
     },
     bindToolSurface,
-    createToolSurface: (options, bindingOptions) => {
-      warnPluginSdkDeprecation({
-        family: "agent-harness-host",
-        method: "createToolSurface",
-        replacement: "createToolSurfaceAsync",
-        compatibility: "Synchronous tool construction retains its pinned skill resources.",
-      });
-      const inputs = toolConstructionInputs(
-        options,
-        loadSkillLibrarySelection(skillResourceSnapshot(options)?.librarySelections ?? []),
-      );
-      return bindCreatedTools(
-        withToolConstructionScope(() =>
-          createOpenClawCodingToolsInternal(inputs.options, inputs.skillReadResources),
-        ),
-        bindingOptions,
-      );
-    },
     createToolSurfaceAsync: async (options, bindingOptions) => {
       const librarySelections = skillResourceSnapshot(options)?.librarySelections ?? [];
       const library = librarySelections.length

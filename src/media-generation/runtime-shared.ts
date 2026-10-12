@@ -17,10 +17,7 @@ import {
 import type { AgentModelConfig } from "../config/types.agents-shared.js";
 import type { OpenClawConfig } from "../config/types.js";
 import { formatErrorMessage, toErrorObject } from "../infra/errors.js";
-import {
-  isProviderApiKeyConfigured,
-  isProviderApiKeyConfiguredAsync,
-} from "../plugins/provider-auth-availability.js";
+import { isProviderApiKeyConfiguredAsync } from "../plugins/provider-auth-availability.js";
 import { getProviderEnvVarsCore } from "../secrets/provider-env-vars.js";
 
 function buildCapabilityCandidateFailure(
@@ -297,36 +294,6 @@ function prepareCapabilityModelCandidates(params: CapabilityModelCandidatesParam
         ? { cfg: params.cfg, agentDir: params.agentDir, listProviders: () => getProviders() }
         : undefined,
   };
-}
-
-/** @deprecated Use resolveCapabilityModelCandidatesAsync for worker-backed credential reads. */
-export function resolveCapabilityModelCandidates(
-  params: CapabilityModelCandidatesParams,
-): ParsedProviderModelRef[] {
-  const prepared = prepareCapabilityModelCandidates(params);
-  const fallbackParams = prepared.fallbackParams;
-  if (fallbackParams) {
-    const configuredProviders: CapabilityProviderCandidate[] = [];
-    for (const provider of fallbackParams.listProviders(params.cfg)) {
-      if (!isAutoCapabilityFallbackCandidate(provider, configuredProviders)) {
-        continue;
-      }
-      const configured = provider.isConfigured
-        ? provider.isConfigured({ cfg: params.cfg, agentDir: params.agentDir })
-        : isProviderApiKeyConfigured({
-            provider: provider.id,
-            cfg: params.cfg,
-            agentDir: params.agentDir,
-          });
-      if (configured) {
-        configuredProviders.push(provider);
-      }
-    }
-    for (const ref of buildAutoCapabilityFallbackRefs(fallbackParams, configuredProviders)) {
-      prepared.add(ref, false);
-    }
-  }
-  return prepared.candidates;
 }
 
 function isAutoCapabilityFallbackCandidate(

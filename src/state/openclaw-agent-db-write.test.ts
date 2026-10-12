@@ -6,7 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { drainStoreWriterQueuesForTest } from "../../test/helpers/promise.js";
 import { useAutoCleanupTempDirTracker } from "../../test/helpers/temp-dir.js";
 import * as databasePathIdentity from "../infra/sqlite-worker-identity.js";
-import { withOpenClawAgentDatabaseWrite } from "../plugin-sdk/sqlite-runtime.js";
+import { withOpenClawAgentDatabaseWrite } from "../plugin-sdk/sqlite-runtime-testing.js";
 import { createDeferredCore } from "../shared/deferred.js";
 import {
   borrowOpenClawAgentDatabase,

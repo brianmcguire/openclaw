@@ -282,12 +282,12 @@ it("propagates queued write revocation and user/custom commit failures without p
 
 it("deduplicates legacy session methods across managers while preserving immediate results", () => {
   const warning = vi.spyOn(process, "emitWarning").mockImplementation(() => {});
-  withPluginRuntimePluginScope({ pluginId: "session-compat-family" }, () => {
+  withPluginRuntimePluginScope({ pluginId: "session-compat-family" }, async () => {
     for (let index = 0; index < 2; index++) {
       const manager = SessionManager.inMemory();
-      const id = manager.appendCustomEntry("legacy", { index });
+      const id = await manager.appendCustomEntryAsync("legacy", { index });
       expect(manager.getEntry(id)).toMatchObject({ id, customType: "legacy", data: { index } });
-      const info = manager.appendSessionInfo("Legacy name");
+      const info = await manager.appendSessionInfoAsync("Legacy name");
       expect(manager.getEntry(info)).toMatchObject({ id: info, type: "session_info" });
     }
   });

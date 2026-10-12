@@ -78,9 +78,6 @@ export async function tryDispatchAcpReplyHook(
     return;
   }
 
-  const legacyFullToolDetails = event.shouldSendFullToolDetailsAsync
-    ? undefined
-    : event.shouldSendFullToolDetails;
   const result = await runtime.tryDispatchAcpReply({
     ctx: finalizedCtx,
     cfg: ctx.cfg,
@@ -102,15 +99,8 @@ export async function tryDispatchAcpReplyHook(
     originatingAccountId: event.originatingAccountId,
     originatingThreadId: event.originatingThreadId,
     originatingChatType: event.originatingChatType,
-    // Boolean-only events remain valid inputs to this released SDK helper.
-    shouldSendToolSummaries: async () =>
-      event.shouldSendToolSummariesAsync
-        ? await event.shouldSendToolSummariesAsync()
-        : event.shouldSendToolSummaries,
-    shouldSendFullToolDetails: async () =>
-      event.shouldSendFullToolDetailsAsync
-        ? await event.shouldSendFullToolDetailsAsync()
-        : legacyFullToolDetails === true,
+    shouldSendToolSummaries: () => event.shouldSendToolSummariesAsync(),
+    shouldSendFullToolDetails: () => event.shouldSendFullToolDetailsAsync(),
     bypassForCommand,
     onReplyStart: ctx.onReplyStart,
     onAgentRunStart: ctx.onAgentRunStart,

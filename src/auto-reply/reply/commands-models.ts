@@ -1,10 +1,7 @@
 import { parseStrictPositiveInteger } from "@openclaw/normalization-core/number-coercion";
 import { resolveAgentDir, resolveSessionAgentId } from "../../agents/agent-scope.js";
 import { resolveAgentHarnessPolicy } from "../../agents/harness/policy.js";
-import {
-  resolveModelAuthLabel,
-  resolveModelAuthLabelAsync,
-} from "../../agents/model-auth-label.js";
+import { resolveModelAuthLabelAsync } from "../../agents/model-auth-label.js";
 import { normalizeProviderId } from "../../agents/model-selection.js";
 import { listOpenAIAuthProfileProvidersForAgentRuntime } from "../../agents/openai-routing.js";
 import {
@@ -13,7 +10,6 @@ import {
 } from "../../agents/prepared-model-runtime.errors.js";
 import { getChannelPlugin } from "../../channels/plugins/index.js";
 import type { OpenClawConfig } from "../../config/types.openclaw.js";
-import { warnPluginSdkDeprecation } from "../../plugins/sdk-deprecation.js";
 import type { ReplyPayload } from "../types.js";
 import { commandReply, defineAuthorizedTextCommand } from "./command-gates.js";
 import {
@@ -139,8 +135,7 @@ async function resolveProviderLabelAsync(params: ProviderLabelParams): Promise<s
   );
 }
 
-/** @deprecated Use formatModelsAvailableHeaderAsync. Removed at the next Plugin SDK major. */
-export function formatModelsAvailableHeader(params: {
+type ModelsAvailableHeaderParams = {
   provider: string;
   total: number;
   cfg: OpenClawConfig;
@@ -149,29 +144,15 @@ export function formatModelsAvailableHeader(params: {
   workspaceDir?: string;
   sessionEntry?: ModelsCommandSessionEntry;
   availability?: ModelsProviderMenu;
-}): string {
-  warnPluginSdkDeprecation({
-    family: "auth-profiles",
-    method: "formatModelsAvailableHeader",
-    replacement: "formatModelsAvailableHeaderAsync",
-  });
-  const providerLabel = formatProviderLabel(
-    params.provider,
-    resolveModelAuthLabel(resolveProviderLabelParams(params)),
-  );
-  return formatModelsHeader(params, providerLabel);
-}
+};
 
 export async function formatModelsAvailableHeaderAsync(
-  params: Parameters<typeof formatModelsAvailableHeader>[0],
+  params: ModelsAvailableHeaderParams,
 ): Promise<string> {
   return formatModelsHeader(params, await resolveProviderLabelAsync(params));
 }
 
-function formatModelsHeader(
-  params: Parameters<typeof formatModelsAvailableHeader>[0],
-  providerLabel: string,
-): string {
+function formatModelsHeader(params: ModelsAvailableHeaderParams, providerLabel: string): string {
   const count =
     params.availability && params.availability.available !== params.total
       ? `${params.availability.available} of ${params.total}`

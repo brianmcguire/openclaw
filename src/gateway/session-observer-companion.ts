@@ -12,7 +12,6 @@ import { resolveSessionSubscriptionKey } from "./session-subscription-keys.js";
 
 export function createSessionObserverCompanionSnapshotReader(params: {
   getConfig: SessionObserverDeps["getConfig"];
-  readSession: NonNullable<SessionObserverDeps["readSession"]>;
   states: Map<string, SessionObserverState>;
   retireObsolete: (scopeKey: string, session: SessionEntry | undefined) => void;
 }) {
@@ -57,9 +56,5 @@ export function createSessionObserverCompanionSnapshotReader(params: {
   return {
     resolve,
     read,
-    readSync(this: void, sessionKey: string, selectedAgentId?: string) {
-      const target = resolve(sessionKey, selectedAgentId);
-      return read(target, params.readSession(target.canonicalSessionKey, target.agentId));
-    },
   };
 }

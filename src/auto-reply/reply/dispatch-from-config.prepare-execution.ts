@@ -267,16 +267,10 @@ export async function prepareDispatchExecution(state: ChooseDispatchRouteReadySt
   // mid-run verbose toggle cannot move inter-tool commentary between lanes.
   const standaloneCommentaryProgressVisible = await shouldEmitVerboseProgressAsync();
   state.assertProgressCurrent();
-  // GetReplyOptions still publishes a synchronous visibility callback to released plugins.
-  const resolveVerboseProgressVisibility = () =>
-    standaloneCommentaryProgressVisible &&
-    state.shouldSendToolSummaries() &&
-    !state.shouldSuppressProgressDeliverySync();
   const { commentaryPayloadsEnabled, draftOwnsCommentaryProgress } =
     await resolveTurnCommentaryProgressOwner({
       commentaryPayloadsEnabled: state.commentaryPayloadsEnabled,
       options: params.replyOptions,
-      resolveVerboseProgressVisibility,
       resolveVerboseProgressVisibilityAsync: async () => {
         const visible =
           standaloneCommentaryProgressVisible &&

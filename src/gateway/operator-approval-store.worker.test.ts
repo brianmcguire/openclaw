@@ -199,10 +199,10 @@ it("runs lookup, pending scans, expiry and history without host SQLite calls thr
   }
 });
 
-it("keeps native reads between earlier and later worker mutations", async () => {
+it("keeps guarded reads between earlier and later worker mutations", async () => {
   const databaseOptions = options();
   const inserted = store.insertOperatorApproval({ approval: approval("ordered"), databaseOptions });
-  const nativeRead = store.getOperatorApprovalDetailed({
+  const guardedRead = store.getOperatorApprovalDetailed({
     id: "ordered",
     nowMs: 2000,
     databaseOptions,
@@ -217,7 +217,7 @@ it("keeps native reads between earlier and later worker mutations", async () => 
   });
   const [insertResult, readResult, resolveResult] = await Promise.all([
     inserted,
-    nativeRead,
+    guardedRead,
     resolved,
   ]);
   expect(insertResult.outcome).toBe("inserted");
@@ -254,88 +254,73 @@ it("revalidates live authority after dispatch and rolls back refused decisions",
   ).toMatchObject({ outcome: "found", record: { status: "pending", decision: null } });
 });
 
-it.each(["worker", "native-compatibility"] as const)(
-  "publishes %s receipts only for a committed winning verdict",
-  async (family) => {
-    const databaseOptions = options();
-    await store.insertOperatorApproval({ approval: approval("receipt-rollback"), databaseOptions });
-    const published: OperatorApprovalRow[] = [];
-    const unknown = vi.fn();
-    const releaseFacts = operatorApprovalPublication.subscribeFacts((change) => {
-      if (change.kind === "unknown") {
-        unknown();
-      }
-      if (change.kind === "committed") {
-        const fact = change.receipt.facts.get("receipt-rollback");
-        if (fact?.kind === "postimage") {
-          published.push(fact.value);
-        }
-      }
-    });
-    const onCommitted = vi.fn(() => {
-      expect(published.at(-1)).toMatchObject({ status: "allowed", decision: "allow-once" });
-    });
-    try {
-      let refuse = true;
-      let current = true;
-      if (family === "worker") {
-        probe.admission(workerAdmission, (request, grant, admit) => {
-          if (request.stage === "commit" && refuse) {
-            current = false;
-          }
-          return admit(request, grant);
-        });
-      }
-      const input = {
-        id: "receipt-rollback",
-        decision: "allow-once" as const,
-        resolver: { kind: "runtime" as const, id: null },
-        nowMs: 2000,
-        databaseOptions,
-        onCommitted,
-        guard: {
-          family,
-          assertCurrent: () => {
-            if (family === "native-compatibility" && refuse) {
-              const observed = native.getOperatorApprovalDetailedInDatabase({
-                id: "receipt-rollback",
-                nowMs: 2000,
-                databaseOptions,
-              });
-              current = observed.outcome !== "found" || observed.record.decision !== "allow-once";
-            }
-            if (!current) {
-              throw new Error("synthetic commit refusal");
-            }
-          },
-        },
-      };
-      await expect(store.resolveOperatorApproval(input)).rejects.toThrow(
-        "synthetic commit refusal",
-      );
-      expect(onCommitted).not.toHaveBeenCalled();
-      expect(published).toEqual([]);
-      expect(unknown).not.toHaveBeenCalled();
-      refuse = false;
-      current = true;
-      expect(
-        await store.getOperatorApprovalDetailed({ id: input.id, nowMs: 2000, databaseOptions }),
-      ).toMatchObject({ outcome: "found", record: { status: "pending" } });
-      const winner = await store.resolveOperatorApproval(input);
-      expect(winner.outcome).toBe("resolved");
-      assert(winner.outcome === "resolved", "Expected committed resolution");
-      expect(onCommitted).toHaveBeenCalledExactlyOnceWith(
-        getOperatorApprovalResolutionKey(winner.record),
-      );
-      expect(await store.resolveOperatorApproval(input)).toMatchObject({
-        outcome: "already-resolved",
-      });
-      expect(onCommitted).toHaveBeenCalledTimes(1);
-    } finally {
-      releaseFacts();
+it("publishes receipts only for a committed winning verdict", async () => {
+  const databaseOptions = options();
+  await store.insertOperatorApproval({ approval: approval("receipt-rollback"), databaseOptions });
+  const published: OperatorApprovalRow[] = [];
+  const unknown = vi.fn();
+  const releaseFacts = operatorApprovalPublication.subscribeFacts((change) => {
+    if (change.kind === "unknown") {
+      unknown();
     }
-  },
-);
+    if (change.kind === "committed") {
+      const fact = change.receipt.facts.get("receipt-rollback");
+      if (fact?.kind === "postimage") {
+        published.push(fact.value);
+      }
+    }
+  });
+  const onCommitted = vi.fn(() => {
+    expect(published.at(-1)).toMatchObject({ status: "allowed", decision: "allow-once" });
+  });
+  try {
+    let refuse = true;
+    let current = true;
+    probe.admission(workerAdmission, (request, grant, admit) => {
+      if (request.stage === "commit" && refuse) {
+        current = false;
+      }
+      return admit(request, grant);
+    });
+    const input = {
+      id: "receipt-rollback",
+      decision: "allow-once" as const,
+      resolver: { kind: "runtime" as const, id: null },
+      nowMs: 2000,
+      databaseOptions,
+      onCommitted,
+      guard: {
+        family: "worker" as const,
+        assertCurrent: () => {
+          if (!current) {
+            throw new Error("synthetic commit refusal");
+          }
+        },
+      },
+    };
+    await expect(store.resolveOperatorApproval(input)).rejects.toThrow("synthetic commit refusal");
+    expect(onCommitted).not.toHaveBeenCalled();
+    expect(published).toEqual([]);
+    expect(unknown).not.toHaveBeenCalled();
+    refuse = false;
+    current = true;
+    expect(
+      await store.getOperatorApprovalDetailed({ id: input.id, nowMs: 2000, databaseOptions }),
+    ).toMatchObject({ outcome: "found", record: { status: "pending" } });
+    const winner = await store.resolveOperatorApproval(input);
+    expect(winner.outcome).toBe("resolved");
+    assert(winner.outcome === "resolved", "Expected committed resolution");
+    expect(onCommitted).toHaveBeenCalledExactlyOnceWith(
+      getOperatorApprovalResolutionKey(winner.record),
+    );
+    expect(await store.resolveOperatorApproval(input)).toMatchObject({
+      outcome: "already-resolved",
+    });
+    expect(onCommitted).toHaveBeenCalledTimes(1);
+  } finally {
+    releaseFacts();
+  }
+});
 
 it("queues a brief approval burst through shared input admission", async () => {
   const databaseOptions = options();

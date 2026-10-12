@@ -26,7 +26,6 @@ export const MODEL_ACCOUNT_CONNECT_COMPAT_RECORD = {
   ],
   tests: [
     "src/plugins/compat/registry.test.ts",
-    "src/plugins/compat/model-account-connect-deprecation.test.ts",
     "src/plugin-sdk/gateway-model-account-connect-compat.test.ts",
     "src/gateway/server-methods/users-auth-connect.test.ts",
   ],

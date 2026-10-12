@@ -139,7 +139,6 @@ export async function executeFollowupTurn(params: {
     await resolveTurnCommentaryProgressOwner({
       commentaryPayloadsEnabled: sourceOpts?.commentaryPayloadsEnabled === true,
       options: sourceOpts,
-      resolveVerboseProgressVisibility: () => progressAllowed() && shouldEmitVerboseToolResult(),
       resolveVerboseProgressVisibilityAsync: async () => {
         assertProgressCurrent();
         return progressAllowed() && shouldEmitVerboseToolResult();

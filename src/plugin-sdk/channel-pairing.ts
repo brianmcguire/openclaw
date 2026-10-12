@@ -7,10 +7,7 @@ export {
   createPairingPrefixStripper,
   createTextPairingAdapter,
 } from "../channels/plugins/pairing-adapters.js";
-export {
-  readChannelAllowFromStore,
-  readChannelAllowFromStoreSync,
-} from "../pairing/pairing-store.js";
+export { readChannelAllowFromStore } from "../pairing/pairing-store.js";
 
 type ScopedPairingAccess = ReturnType<typeof createScopedPairingAccess>;
 

@@ -137,15 +137,15 @@ describe("submitEmbeddedAttemptPrompt", () => {
     });
     const systemPrompt = "Preserve the project requirements.";
     const sessionManager = SessionManager.inMemory();
-    sessionManager.appendMessage({
+    await sessionManager.appendMessageAsync({
       role: "user",
       content: "Earlier archive decision: blue buttons. ".repeat(270),
       timestamp: 1,
     });
-    sessionManager.appendMessage(
+    await sessionManager.appendMessageAsync(
       createAssistant(model, [{ type: "text", text: "Archived the decision." }]),
     );
-    sessionManager.appendMessage({
+    await sessionManager.appendMessageAsync({
       role: "user",
       content: "Current project detail. ".repeat(140),
       timestamp: 3,
@@ -158,7 +158,7 @@ describe("submitEmbeddedAttemptPrompt", () => {
     );
     expect(priorInputTokens).toBeGreaterThan(3_072);
     expect(priorInputTokens).toBeLessThan(model.contextWindow);
-    sessionManager.appendMessage(
+    await sessionManager.appendMessageAsync(
       createAssistant(
         model,
         [{ type: "text", text: "Details recorded." }],
@@ -348,9 +348,9 @@ describe("submitEmbeddedAttemptPrompt", () => {
         idempotencyKey: "same-turn",
         __openclaw: { modelPromptProjection: { version: 1, text: "transcript prompt" } },
       };
-      sessionManager.appendMessage(user);
+      await sessionManager.appendMessageAsync(user);
       const carrier = contextMessage("original context");
-      sessionManager.appendCustomMessageEntry(
+      await sessionManager.appendCustomMessageEntryAsync(
         carrier.customType,
         carrier.content,
         carrier.display,
@@ -471,10 +471,14 @@ describe("submitEmbeddedAttemptPrompt", () => {
         storePath: path.join(state.agentDir("main"), "openclaw-agent.sqlite"),
       };
       await upsertSessionEntryCore(target, { sessionId, updatedAt: 1 });
-      const sessionManager = SessionManager.open(target, state.workspaceDir);
+      const sessionManager = await SessionManager.openAsync(target, state.workspaceDir);
       if (scenario !== "first-turn") {
-        sessionManager.appendMessage({ role: "user", content: "old conversation", timestamp: 1 });
-        sessionManager.appendResetBoundary("reset");
+        await sessionManager.appendMessageAsync({
+          role: "user",
+          content: "old conversation",
+          timestamp: 1,
+        });
+        await sessionManager.appendResetBoundaryAsync("reset");
       }
       const beforeCurrentUserLeaf = sessionManager.getLeafId();
       const currentUser = {
@@ -483,7 +487,7 @@ describe("submitEmbeddedAttemptPrompt", () => {
         idempotencyKey: "btw-current-user:user",
         timestamp: 2,
       };
-      const appended = sessionManager.appendMessageWithTranscriptAnchor(currentUser);
+      const appended = await sessionManager.appendMessageWithTranscriptAnchorAsync(currentUser);
       if (!appended.anchor) {
         throw new Error("Expected a persisted current-user admission");
       }
@@ -871,7 +875,7 @@ describe("embedded provider dispatch admission", () => {
           );
         });
         const sessionManager = guardSessionManager(
-          SessionManager.open(target, state.workspaceDir),
+          await SessionManager.openAsync(target, state.workspaceDir),
           { preparedUserTurnMessage: message, preparedUserTurnTranscriptRecorder: recorder },
         );
         const { session } = await createTestSession({ sessionManager });

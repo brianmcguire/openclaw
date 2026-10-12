@@ -9,10 +9,8 @@ import {
 } from "../agents/model-selection.js";
 import { getChannelPlugin, getLoadedChannelPlugin } from "../channels/plugins/index.js";
 import { resolveSessionStorePathCore } from "../config/sessions/paths.js";
-import { loadSessionEntryReadOnly } from "../config/sessions/session-accessor.js";
 import { readSessionEntryReadOnlyInWorker } from "../config/sessions/session-entry-read-runtime.js";
 import type { OpenClawConfig } from "../config/types.js";
-import { warnPluginSdkDeprecation } from "../plugins/sdk-deprecation.js";
 import type { SkillCommandSpec } from "../skills/types.js";
 import type { CommandTurnContext } from "./command-turn-context.js";
 import { listChatCommands, listChatCommandsForConfig } from "./commands-registry-list.js";
@@ -381,30 +379,6 @@ type ResolvedCommandArgMenu = {
   choices: ResolvedCommandArgChoice[];
   title?: string;
 };
-
-/** @deprecated Use resolveCommandArgMenuAsync. Removed at the next Plugin SDK major. */
-export function resolveCommandArgMenu(params: CommandArgMenuParams): ResolvedCommandArgMenu | null {
-  warnPluginSdkDeprecation({
-    family: "native-command-menu",
-    method: "resolveCommandArgMenu",
-    replacement: "resolveCommandArgMenuAsync",
-  });
-  const menu = resolveCommandArgMenuChoices(params);
-  if (menu && params.command.key === "verbose" && params.cfg && params.session) {
-    const { agentId, sessionKey } = params.session;
-    const entry = loadSessionEntryReadOnly({
-      agentId,
-      storePath: resolveSessionStorePathCore(params.cfg.session?.store, { agentId }),
-      sessionKey,
-    });
-    setVerboseMenuTitle(
-      menu,
-      params.command,
-      entry?.verboseLevel ?? resolveAgentConfig(params.cfg, agentId)?.verboseDefault ?? "off",
-    );
-  }
-  return menu;
-}
 
 /** Resolves menu choices and session-owned status through the asynchronous read owner. */
 export async function resolveCommandArgMenuAsync(

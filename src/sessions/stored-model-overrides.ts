@@ -12,7 +12,6 @@ import {
   resolveSessionModelOverrideRouteResolution,
 } from "../config/sessions/model-override-provenance.js";
 import type { SessionEntry } from "../config/sessions/types.js";
-import { warnPluginSdkDeprecation } from "../plugins/sdk-deprecation.js";
 
 /** Model override loaded from the current session or its parent session. */
 export type StoredModelOverride = {
@@ -88,8 +87,7 @@ function resolveParentSessionKeyCandidate(params: {
   return null;
 }
 
-/** @deprecated Use resolveStoredModelOverrideAsync. Removed at the next Plugin SDK major. */
-export function resolveStoredModelOverride(params: {
+type StoredModelOverrideParams = {
   loadSessionEntry?: (sessionKey: string) => SessionEntry | undefined;
   sessionEntry?: SessionEntry;
   sessionStore?: Record<string, SessionEntry>;
@@ -97,26 +95,11 @@ export function resolveStoredModelOverride(params: {
   parentSessionKey?: string;
   defaultProvider: string;
   allowPluginNormalization?: boolean;
-}): StoredModelOverride | null {
-  warnPluginSdkDeprecation({
-    family: "session-model-override",
-    method: "resolveStoredModelOverride",
-    replacement: "resolveStoredModelOverrideAsync",
-  });
-  return resolveStoredModelOverrideCore({
-    loadSessionEntry: params.loadSessionEntry,
-    sessionEntry: params.sessionEntry,
-    sessionStore: params.sessionStore,
-    sessionKey: params.sessionKey,
-    parentSessionKey: params.parentSessionKey,
-    defaultProvider: params.defaultProvider,
-    allowPluginNormalization: params.allowPluginNormalization,
-  });
-}
+};
 
 /** Resolve inherited model selection without synchronous session-store access. */
 export async function resolveStoredModelOverrideAsync(
-  params: Omit<Parameters<typeof resolveStoredModelOverride>[0], "loadSessionEntry"> & {
+  params: Omit<StoredModelOverrideParams, "loadSessionEntry"> & {
     loadSessionEntry?: (
       sessionKey: string,
     ) => SessionEntry | undefined | Promise<SessionEntry | undefined>;
@@ -140,7 +123,7 @@ export async function resolveStoredModelOverrideAsync(
 
 /** Resolves the persisted model override visible to the current session. */
 export function resolveStoredModelOverrideCore(
-  params: Parameters<typeof resolveStoredModelOverride>[0] & ModelManifestNormalizationContext,
+  params: StoredModelOverrideParams & ModelManifestNormalizationContext,
 ): StoredModelOverride | null {
   if (params.sessionEntry?.modelOverrideSource === "default") {
     return null;

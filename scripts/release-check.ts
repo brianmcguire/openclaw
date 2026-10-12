@@ -1114,7 +1114,7 @@ const requiredPluginSdkExports = [
   "clearHistoryEntriesIfEnabled",
   "recordPendingHistoryEntryIfEnabled",
   "resolveControlCommandGate",
-  "resolveDmGroupAccessWithLists",
+  "resolveDmGroupAccessWithListsAsync",
   "resolveAllowlistProviderRuntimeGroupPolicy",
   "resolveDefaultGroupPolicy",
   "resolveChannelMediaMaxBytes",

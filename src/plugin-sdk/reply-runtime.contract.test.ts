@@ -49,31 +49,16 @@ describe("reply runtime public progress contracts", () => {
     expectTypeOf<Callback>().returns.toEqualTypeOf<unknown>();
   });
 
-  it("retains released synchronous visibility contracts beside awaited companions", () => {
-    expectTypeOf<GetReplyOptions["onVerboseProgressVisibility"]>().toEqualTypeOf<
-      ((isActive: () => boolean) => void) | undefined
-    >();
+  it("requires awaited reply dispatch visibility", () => {
     expectTypeOf<GetReplyOptions["onVerboseProgressVisibilityAsync"]>().toEqualTypeOf<
       ((isActive: () => Promise<boolean>) => Promise<void> | void) | undefined
     >();
-    expectTypeOf<
-      PluginHookReplyDispatchEvent["shouldSendToolSummaries"]
-    >().toEqualTypeOf<boolean>();
-    expectTypeOf<
-      PluginHookReplyDispatchEvent["shouldSendFullToolDetails"]
-    >().toEqualTypeOf<boolean>();
     expectTypeOf<PluginHookReplyDispatchEvent["shouldSendToolSummariesAsync"]>().toEqualTypeOf<
-      (() => Promise<boolean>) | undefined
+      () => Promise<boolean>
     >();
     expectTypeOf<PluginHookReplyDispatchEvent["shouldSendFullToolDetailsAsync"]>().toEqualTypeOf<
-      (() => Promise<boolean>) | undefined
+      () => Promise<boolean>
     >();
-    expectTypeOf<
-      Omit<
-        PluginHookReplyDispatchEvent,
-        "shouldSendToolSummariesAsync" | "shouldSendFullToolDetailsAsync"
-      >
-    >().toExtend<PluginHookReplyDispatchEvent>();
   });
   it("still accepts the deprecated suppressToolErrorWarnings option as a no-op", () => {
     // Removal window: first stable release after 2026.10 (see GetReplyOptions).

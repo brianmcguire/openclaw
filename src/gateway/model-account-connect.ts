@@ -10,14 +10,10 @@ import type {
   UsersUnlinkAuthProfileResult,
 } from "../../packages/gateway-protocol/src/schema/users.js";
 import { resolveSharedMainAuthAgentDir } from "../agents/auth-profiles/shared-main-dir.js";
-import {
-  ensureAuthProfileStoreWithoutExternalProfiles,
-  ensureAuthProfileStoreWithoutExternalProfilesAsync,
-} from "../agents/auth-profiles/store-runtime.js";
+import { ensureAuthProfileStoreWithoutExternalProfilesAsync } from "../agents/auth-profiles/store-runtime.js";
 import type { AuthProfileCredential } from "../agents/auth-profiles/types.js";
 import type { OpenClawConfig } from "../config/types.openclaw.js";
 import { registerSecretValueForRedaction } from "../logging/secret-redaction-registry.js";
-import { warnModelAccountConnectDeprecation } from "../plugins/compat/model-account-connect-deprecation.js";
 import {
   listPersonalAccountAuthChoices,
   resolvePersonalAccountAuthMethod,
@@ -36,7 +32,7 @@ import {
   readSelectedUserModelAccountAsync,
   setUserProfileAuthLinkAsync,
 } from "../state/user-model-account-operations.js";
-import * as nativeAccounts from "../state/user-model-accounts.js";
+import type { UserModelAccount } from "../state/user-model-accounts.js";
 import { captureUserProfileModelAccountLinksAuthority } from "../state/user-profile-events.js";
 import { sanitizeWizardStepForClient, WizardSession } from "../wizard/session.js";
 import type {
@@ -93,7 +89,7 @@ async function resolveOwnedAccountProvider(
   );
 }
 
-function requireOwnedAccountProvider(account: nativeAccounts.UserModelAccount | undefined): string {
+function requireOwnedAccountProvider(account: UserModelAccount | undefined): string {
   if (!account) {
     throw new ModelAccountConnectInputError(
       "Select an account from your personal account list, or add it first.",
@@ -115,15 +111,6 @@ async function resolveLinkableAuthProfileProvider(
     resolveSharedMainAuthAgentDir(),
     { readOnly: true },
   );
-  return store.profiles[authProfileId]?.provider ?? cfg.auth?.profiles?.[authProfileId]?.provider;
-}
-
-function resolveSharedAuthProfileProvider(cfg: OpenClawConfig, authProfileId: string) {
-  // Stored credentials and config-only routes (e.g. aws-sdk) remain linkable;
-  // the caller cannot claim a provider the selected profile does not satisfy.
-  const store = ensureAuthProfileStoreWithoutExternalProfiles(resolveSharedMainAuthAgentDir(), {
-    readOnly: true,
-  });
   return store.profiles[authProfileId]?.provider ?? cfg.auth?.profiles?.[authProfileId]?.provider;
 }
 
@@ -205,17 +192,6 @@ export function createModelAccountConnectService(options: {
     }
     return result;
   };
-  const projectResult = (
-    action: ModelAccountConnectAction,
-    operation: ConnectOperation,
-  ): UsersAuthConnectStatusResult => {
-    const result = resultSnapshot(operation);
-    if (result.status !== "connected") {
-      return result;
-    }
-    assertRunning(action);
-    return { ...result, links: nativeAccounts.listUserProfileAuthLinks(operation.owner) };
-  };
   const projectResultAsync = async (
     action: ModelAccountConnectAction,
     operation: ConnectOperation,
@@ -288,21 +264,6 @@ export function createModelAccountConnectService(options: {
       return { links };
     });
   };
-  const setLinkNative = (
-    action: ModelAccountConnectAction,
-    provider: string,
-    authProfileId: string,
-  ) => {
-    const links = nativeAccounts.setUserProfileAuthLink({
-      profileId: action.owner,
-      provider,
-      authProfileId,
-      assertCurrent: () => assertRunning(action),
-    });
-    supersede(action.owner, provider);
-    options.onChanged?.();
-    return { links };
-  };
   const cancelOperation = (action: ModelAccountConnectAction, connectId: string) => {
     const operation = findOperation(action, connectId);
     if (operation) {
@@ -323,73 +284,6 @@ export function createModelAccountConnectService(options: {
   };
 
   return {
-    /** @deprecated Await listLinksAsync; synchronous SDK compatibility ends at the next SDK major. */
-    listLinks(action: ModelAccountConnectAction): UsersListAuthLinksResult {
-      warnModelAccountConnectDeprecation("listLinks");
-      assertRunning(action);
-      return { links: nativeAccounts.listUserProfileAuthLinks(action.owner) };
-    },
-    /** @deprecated Await linkAsync; synchronous SDK compatibility ends at the next SDK major. */
-    link(action: ModelAccountConnectAction, authProfileId: string): UsersLinkAuthProfileResult {
-      warnModelAccountConnectDeprecation("link");
-      assertRunning(action);
-      const provider = isUserModelAuthProfileId(authProfileId)
-        ? requireOwnedAccountProvider(
-            nativeAccounts.readUserModelAccountSummary({ profileId: action.owner, authProfileId }),
-          )
-        : resolveSharedAuthProfileProvider(options.getConfig(), authProfileId);
-      return setLinkNative(action, requireLinkableProvider(provider, authProfileId), authProfileId);
-    },
-    /** @deprecated Await unlinkAsync; synchronous SDK compatibility ends at the next SDK major. */
-    unlink(action: ModelAccountConnectAction, provider: string): UsersUnlinkAuthProfileResult {
-      warnModelAccountConnectDeprecation("unlink");
-      assertRunning(action);
-      const links = nativeAccounts.clearUserProfileAuthLink({
-        profileId: action.owner,
-        provider,
-        assertCurrent: () => assertRunning(action),
-      });
-      supersede(action.owner, provider);
-      options.onChanged?.();
-      return { links };
-    },
-    /** @deprecated Await listAsync; synchronous SDK compatibility ends at the next SDK major. */
-    list(action: ModelAccountConnectAction, cursor?: string): UsersListModelAccountsResult {
-      warnModelAccountConnectDeprecation("list");
-      assertRunning(action);
-      return {
-        profileId: action.owner,
-        ...nativeAccounts.listUserModelAccounts({ profileId: action.owner, cursor }),
-        links: nativeAccounts.listUserProfileAuthLinks(action.owner),
-      };
-    },
-    /** @deprecated Await selectAsync; synchronous SDK compatibility ends at the next SDK major. */
-    select(
-      action: ModelAccountConnectAction,
-      authProfileId: string,
-    ): UsersSelectModelAccountResult {
-      warnModelAccountConnectDeprecation("select");
-      assertRunning(action);
-      return setLinkNative(
-        action,
-        requireOwnedAccountProvider(
-          nativeAccounts.readUserModelAccountSummary({ profileId: action.owner, authProfileId }),
-        ),
-        authProfileId,
-      );
-    },
-    /** @deprecated Await statusAsync; synchronous SDK compatibility ends at the next SDK major. */
-    status(action: ModelAccountConnectAction, connectId: string): UsersAuthConnectStatusResult {
-      warnModelAccountConnectDeprecation("status");
-      const operation = findOperation(action, connectId);
-      return operation ? projectResult(action, operation) : { status: "expired" };
-    },
-    /** @deprecated Await cancelAsync; synchronous SDK compatibility ends at the next SDK major. */
-    cancel(action: ModelAccountConnectAction, connectId: string): UsersAuthConnectStatusResult {
-      warnModelAccountConnectDeprecation("cancel");
-      const operation = cancelOperation(action, connectId);
-      return operation ? projectResult(action, operation) : { status: "expired" };
-    },
     async listLinksAsync(action: ModelAccountConnectAction): Promise<UsersListAuthLinksResult> {
       assertRunning(action);
       const links = await listUserProfileAuthLinksAsync(action.owner);

@@ -23,6 +23,8 @@ import {
   releaseSubagentRun,
 } from "../../agents/subagents/registry/subagent-registry.test-helpers.js";
 import { getRuntimeConfig } from "../../config/config.js";
+import { buildConversationIdentity } from "../../config/sessions/conversation-identity.js";
+import { resolveCurrentConversationSession } from "../../config/sessions/conversation-registry.js";
 import {
   loadSessionEntry,
   patchSessionEntryCore,
@@ -41,7 +43,6 @@ import {
   type ExecRequestOwner,
 } from "../../infra/exec-request-context.js";
 import {
-  getConversationSession,
   normalizeSessionDeliveryState,
   patchSessionEntry,
 } from "../../plugin-sdk/session-store-runtime.js";
@@ -690,6 +691,10 @@ describe.each(["fast", "command"] as const)("%s Stop current owner", (pathKind) 
       peerId: "g12345678",
       threadId: "123.456",
     };
+    const conversationRef = buildConversationIdentity({
+      ...address,
+      deliveryTarget: address.peerId,
+    })!.conversationRef;
     const delivery = normalizeSessionDeliveryState({
       context: {
         channel: "slack",
@@ -710,7 +715,7 @@ describe.each(["fast", "command"] as const)("%s Stop current owner", (pathKind) 
     operation.attachBackend({ kind: "embedded", cancel: () => {}, isStreaming: () => true });
     let reassigned = false;
     state.isCommandTargetCurrent = () => {
-      const current = getConversationSession(address);
+      const current = resolveCurrentConversationSession(address, conversationRef);
       if (
         !reassigned &&
         operation.abortSignal.aborted &&
@@ -736,7 +741,7 @@ describe.each(["fast", "command"] as const)("%s Stop current owner", (pathKind) 
     );
     expect(operation.abortSignal.aborted).toBe(true);
     expect(reassigned).toBe(true);
-    expect(getConversationSession(address)).toEqual({
+    expect(resolveCurrentConversationSession(address, conversationRef)).toEqual({
       sessionKey: nextKey,
       sessionId: "session-b",
     });

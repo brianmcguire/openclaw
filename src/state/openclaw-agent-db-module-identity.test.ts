@@ -21,7 +21,7 @@ it("shares agent ownership, worker publication, reclamation queues, and commit o
     fs.writeFileSync(path.join(root, "config.json"), "{}\n");
     fs.writeFileSync(
       path.join(root, "plugin.ts"),
-      'export * from "openclaw/plugin-sdk/sqlite-runtime";\n',
+      'export * from "openclaw/plugin-sdk/sqlite-runtime";\nexport { borrowOpenClawAgentDatabase, openOpenClawAgentDatabase } from "openclaw/plugin-sdk/sqlite-runtime-testing";\n',
     );
     // Standalone/watch still needs the packaged graph, rebuilt from current source.
     if (hostUrl.pathname.endsWith(".ts")) {
@@ -123,7 +123,10 @@ it("shares agent ownership, worker publication, reclamation queues, and commit o
           const modulePath = path.join(root, "plugin.ts");
           plugin = host.getCachedPluginModuleLoader({
             modulePath, rootDir: root, importerUrl: import.meta.url, tryNative: false,
-            aliasMap: { "openclaw/plugin-sdk/sqlite-runtime": ${JSON.stringify(fileURLToPath(sdkUrl))} },
+            aliasMap: {
+              "openclaw/plugin-sdk/sqlite-runtime": ${JSON.stringify(fileURLToPath(sdkUrl))},
+              "openclaw/plugin-sdk/sqlite-runtime-testing": ${JSON.stringify(fileURLToPath(sdkUrl))},
+            },
           })(modulePath);
           assert.equal(plugin.openOpenClawAgentDatabase, nativeSdk.openOpenClawAgentDatabase,
             "plugin transformation retains the native SDK owner");

@@ -103,7 +103,9 @@ type InternalSessionTranscriptDeliveryMirror =
     }
   | SkillWorkshopChangeNotice;
 
-export type SessionTranscriptAssistantMessage = Parameters<SessionManager["appendMessage"]>[0] & {
+export type SessionTranscriptAssistantMessage = Parameters<
+  SessionManager["appendMessageAsync"]
+>[0] & {
   role: "assistant";
   [ASSISTANT_DISPLAY_CONTENT_FIELD]?: Array<Record<string, unknown>>;
 };
@@ -429,7 +431,7 @@ async function appendExactAssistantMessageWithSource(
   const message = {
     ...params.message,
     ...(explicitIdempotencyKey ? { idempotencyKey: explicitIdempotencyKey } : {}),
-  } as Parameters<SessionManager["appendMessage"]>[0];
+  } as Parameters<SessionManager["appendMessageAsync"]>[0];
   const preparedUnkeyedMessage =
     !explicitIdempotencyKey && params.beforeMessageWrite
       ? applyBeforeMessageWriteToAssistant({
@@ -502,7 +504,7 @@ async function appendExactAssistantMessageWithSource(
               workerPreparation: {
                 prepareMessageAfterIdempotencyCheck: (candidate: unknown) =>
                   applyBeforeMessageWriteToAssistant({
-                    message: candidate as Parameters<SessionManager["appendMessage"]>[0],
+                    message: candidate as Parameters<SessionManager["appendMessageAsync"]>[0],
                     beforeMessageWrite: params.beforeMessageWrite,
                     explicitIdempotencyKey,
                     agentId: transcriptAgentId,

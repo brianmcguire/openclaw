@@ -269,16 +269,7 @@ export type GetReplyOptions = {
   suppressToolProgressMessages?: boolean;
   /** Allow channel-owned tool lifecycle feedback while text progress remains hidden. */
   allowToolLifecycleWhenProgressHidden?: boolean;
-  /**
-   * Called before dispatch with a live getter for whether verbose standalone
-   * progress messages are active for this run. Channels that render tool or
-   * commentary progress inside an ephemeral streaming draft should yield those
-   * draft lines while the getter returns true, so progress is not rendered in
-   * both lanes at once.
-   * @deprecated Use onVerboseProgressVisibilityAsync; retained until the next Plugin SDK major.
-   */
-  onVerboseProgressVisibility?: (isActive: () => boolean) => void;
-  /** Registers awaited visibility before dispatch; preferred over the deprecated callback. */
+  /** Registers awaited visibility before dispatch for channel-owned progress rendering. */
   onVerboseProgressVisibilityAsync?: (isActive: () => Promise<boolean>) => Promise<void> | void;
   /** Preserve source-event callback start order for stateful channel progress renderers. */
   preserveProgressCallbackStartOrder?: boolean;

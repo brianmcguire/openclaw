@@ -1,9 +1,14 @@
 import { createServer } from "node:http";
 import type { Socket } from "node:net";
 import { createDeferred } from "openclaw/plugin-sdk/extension-shared";
-import { captureHttpExchange, type CaptureEventRecord } from "openclaw/plugin-sdk/proxy-capture";
+import {
+  captureHttpExchangeAsync,
+  finalizeDebugProxyCaptureAsync,
+  type CaptureEventRecord,
+} from "openclaw/plugin-sdk/proxy-capture";
 import { fetchWithRuntimeDispatcher } from "openclaw/plugin-sdk/runtime-fetch";
-import { afterAll, describe, expect, it, vi } from "vitest";
+import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { installDebugProxyCaptureWriter } from "../../../src/proxy-capture/runtime-writer.test-support.js";
 
 const fixture = vi.hoisted(() => ({
   url: "",
@@ -11,6 +16,28 @@ const fixture = vi.hoisted(() => ({
   received: undefined as ((response: Response) => void) | undefined,
   captured: undefined as ((event: CaptureEventRecord) => void) | undefined,
 }));
+
+let captureSettings = {
+  enabled: true,
+  required: false,
+  dbPath: "unused-memory-sink",
+  blobDir: "unused-memory-sink",
+  certDir: "unused-memory-sink",
+  sessionId: "googlechat-reader-test",
+  sourceProcess: "test",
+};
+beforeEach(() => {
+  captureSettings = { ...captureSettings };
+  installDebugProxyCaptureWriter((event) => {
+    if (event.kind === "response" || event.kind === "error") {
+      fixture.captured?.(event);
+    }
+  });
+});
+afterEach(async () => {
+  await finalizeDebugProxyCaptureAsync(captureSettings);
+  vi.restoreAllMocks();
+});
 
 // Change only the destination to our owned server; keep the real guard,
 // dispatcher, response reader, capture tee, and request cleanup.
@@ -25,31 +52,9 @@ vi.mock("openclaw/plugin-sdk/ssrf-runtime", async (importOriginal) => {
         policy: { allowPrivateNetwork: true, hostnameAllowlist: ["127.0.0.1"] },
         fetchImpl: async (input, init) => {
           const response = await fetchWithRuntimeDispatcher(input, init);
-          const captured = fixture.captured;
-          captureHttpExchange(
+          void captureHttpExchangeAsync(
             { url: fixture.url, method: "GET", response },
-            {
-              enabled: true,
-              required: false,
-              dbPath: "unused-memory-sink",
-              blobDir: "unused-memory-sink",
-              certDir: "unused-memory-sink",
-              sessionId: "googlechat-reader-test",
-              sourceProcess: "test",
-            },
-            {
-              getStore: () => ({
-                upsertSession() {},
-                endSession() {},
-                recordEvent(event) {
-                  if (event.kind === "response" || event.kind === "error") {
-                    captured?.(event);
-                  }
-                },
-              }),
-              persistEventPayload: (_store, { data }) =>
-                Buffer.isBuffer(data) ? { dataText: data.toString("utf8") } : {},
-            },
+            captureSettings,
           );
           return response;
         },

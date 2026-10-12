@@ -101,7 +101,7 @@ vi.mock("../tts/tts-settings.js", () => ({
 const sessionDirs = useSessionStoreTempDirs(afterAll, "openclaw-cli-hooks-");
 let sessionFileEnvSnapshot: ReturnType<typeof captureEnv> | undefined;
 
-function createSessionFixture(params?: {
+async function createSessionFixture(params?: {
   history?: Array<{ role: "user"; content: string }>;
   sessionKey?: string;
 }) {
@@ -116,9 +116,9 @@ function createSessionFixture(params?: {
     storePath,
   };
   ensureSessionEntrySync(sessionTarget, { sessionId: "s1", updatedAt: Date.now() });
-  const manager = SessionManager.open(sessionTarget, dir);
+  const manager = await SessionManager.openAsync(sessionTarget, dir);
   for (const [index, entry] of (params?.history ?? []).entries()) {
-    manager.appendMessage({ ...entry, timestamp: index + 1 });
+    await manager.appendMessageAsync({ ...entry, timestamp: index + 1 });
   }
   return { dir, sessionFile: sessionTarget.sessionKey, sessionTarget, storePath };
 }
@@ -839,7 +839,7 @@ describe("runCliAgent reliability", () => {
   });
 
   it("hooks the visible source reply without pre-persisting its dispatch mirror", async () => {
-    const { sessionFile, sessionTarget, storePath } = createSessionFixture();
+    const { sessionFile, sessionTarget, storePath } = await createSessionFixture();
     const hookRunner = createLifecycleHooks(["llm_output", "agent_end"]);
     supervisorSpawnMock.mockImplementationOnce(async (...args: unknown[]) => {
       const input = args[0] as Parameters<ReturnType<typeof getProcessSupervisor>["spawn"]>[0];
@@ -994,7 +994,7 @@ describe("runCliAgent reliability", () => {
       }),
     );
     const clearBeforeRetry = vi.fn(async () => false);
-    const { dir, sessionTarget } = createSessionFixture({
+    const { dir, sessionTarget } = await createSessionFixture({
       sessionKey: "agent:main:subagent:retained-format",
       history: [{ role: "user", content: "earlier context" }],
     });
@@ -1089,7 +1089,7 @@ describe("runCliAgent reliability", () => {
         }
         return makeManagedRun({ stdout: "hello from fresh cli" });
       });
-      const { dir, sessionTarget } = createSessionFixture({
+      const { dir, sessionTarget } = await createSessionFixture({
         sessionKey: "agent:main:subagent:retry",
         history: [{ role: "user", content: "earlier context" }],
       });
@@ -1162,7 +1162,7 @@ describe("runCliAgent reliability", () => {
   );
 
   it("returns accepted CLI session spawns when sessions_yield pauses the requester", async () => {
-    const { dir, sessionFile, sessionTarget, storePath } = createSessionFixture();
+    const { dir, sessionFile, sessionTarget, storePath } = await createSessionFixture();
     const requesterTurnRunId = "run-cli-yield";
     const childRunId = "run-cli-child";
     const childSessionKey = "agent:main:subagent:cli-child";
@@ -1288,7 +1288,7 @@ describe("runCliAgent reliability", () => {
 
   it("records transformed fresh Claude reseed prompts with durable local proof", async () => {
     supervisorSpawnMock.mockResolvedValueOnce(makeManagedRun({ stdout: "hello from claude" }));
-    const { dir, sessionTarget } = createSessionFixture();
+    const { dir, sessionTarget } = await createSessionFixture();
     const historyPrompt = [
       "Continue this conversation using the OpenClaw transcript below as prior session history.",
       "Treat it as authoritative context for this fresh CLI session.",
@@ -1334,7 +1334,7 @@ describe("runCliAgent reliability", () => {
 
   it("does not mint a reseed receipt without caller-owned durable proof", async () => {
     supervisorSpawnMock.mockResolvedValueOnce(makeManagedRun({ stdout: "hello from claude" }));
-    const { dir, sessionTarget } = createSessionFixture();
+    const { dir, sessionTarget } = await createSessionFixture();
 
     vi.mocked(cliTranscript.claudeCliSessionTranscriptHasContent).mockResolvedValue(true);
     const context = makeClaudePreparedContext({
@@ -1358,7 +1358,7 @@ describe("runCliAgent reliability", () => {
 
   it("mints an omission receipt for a trusted suppressed reseed turn", async () => {
     supervisorSpawnMock.mockResolvedValueOnce(makeManagedRun({ stdout: "hello from claude" }));
-    const { dir, sessionTarget } = createSessionFixture();
+    const { dir, sessionTarget } = await createSessionFixture();
     const recorder = createUserTurnTranscriptRecorder({
       target: createTestUserTurnTranscriptTarget({
         sessionId: "s1",
@@ -1396,7 +1396,7 @@ describe("runCliAgent reliability", () => {
 
   it("reuses durable local proof when a fallback suppresses duplicate persistence", async () => {
     supervisorSpawnMock.mockResolvedValueOnce(makeManagedRun({ stdout: "hello from claude" }));
-    const { dir, sessionTarget } = createSessionFixture();
+    const { dir, sessionTarget } = await createSessionFixture();
     const recorder = createCliUserTurnRecorder({
       text: "current ask",
       sessionTarget,
@@ -1461,7 +1461,7 @@ describe("runCliAgent reliability", () => {
     };
     setHookRunnerForTest(hookRunner);
     supervisorSpawnMock.mockResolvedValueOnce(makeManagedRun({ stdout: "secret CLI output" }));
-    const { dir, sessionTarget, storePath } = createSessionFixture();
+    const { dir, sessionTarget, storePath } = await createSessionFixture();
 
     const context = buildPreparedContext({
       sessionKey: "agent:main:main",
@@ -1493,7 +1493,7 @@ describe("runCliAgent reliability", () => {
 
   it("does not persist private room-event assistant output", async () => {
     supervisorSpawnMock.mockResolvedValueOnce(makeManagedRun({ stdout: "private ambient output" }));
-    const { dir, sessionTarget, storePath } = createSessionFixture();
+    const { dir, sessionTarget, storePath } = await createSessionFixture();
 
     const context = buildPreparedContext({
       sessionKey: "agent:main:main",
@@ -1522,7 +1522,7 @@ describe("runCliAgent reliability", () => {
     };
     setHookRunnerForTest(hookRunner);
     supervisorSpawnMock.mockResolvedValueOnce(makeManagedRun({ stdout: "hello from cli" }));
-    const { dir, sessionTarget } = createSessionFixture();
+    const { dir, sessionTarget } = await createSessionFixture();
     const recorder = createUserTurnTranscriptRecorder({
       input: { text: "blocked user turn" },
       target: createTestUserTurnTranscriptTarget({
@@ -1611,7 +1611,7 @@ describe("runCliAgent reliability", () => {
       }),
     };
     setHookRunnerForTest(hookRunner);
-    const { dir, sessionTarget, storePath } = createSessionFixture({
+    const { dir, sessionTarget, storePath } = await createSessionFixture({
       history: [{ role: "user", content: "earlier context" }],
     });
 
@@ -1783,7 +1783,7 @@ describe("runCliAgent reliability", () => {
       })),
     };
     setHookRunnerForTest(hookRunner);
-    const { dir, sessionFile, sessionTarget, storePath } = createSessionFixture();
+    const { dir, sessionFile, sessionTarget, storePath } = await createSessionFixture();
     const onUserMessagePersisted = vi.fn();
 
     const recorder = createUserTurnTranscriptRecorder({
@@ -1916,7 +1916,7 @@ describe("runCliAgent reliability", () => {
 
   it("does not emit duplicate llm_input when session-expired recovery succeeds", async () => {
     const hookRunner = createLifecycleHooks(["llm_input", "llm_output", "agent_end"]);
-    const { dir, sessionFile, sessionTarget } = createSessionFixture({
+    const { dir, sessionFile, sessionTarget } = await createSessionFixture({
       history: Array.from({ length: MAX_CLI_SESSION_HISTORY_MESSAGES + 5 }, (_, index) => ({
         role: "user" as const,
         content: `history-${index}`,
@@ -2086,7 +2086,7 @@ describe("runCliAgent reliability", () => {
   });
 
   it("keeps native control operations out of restrictive prompt preparation", async () => {
-    const { dir, sessionFile, sessionTarget } = createSessionFixture({
+    const { dir, sessionFile, sessionTarget } = await createSessionFixture({
       history: [{ role: "user", content: "earlier ask" }],
     });
     const config: OpenClawConfig = { agents: { defaults: { workspace: dir } } };

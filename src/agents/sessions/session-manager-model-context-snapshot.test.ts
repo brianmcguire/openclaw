@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { DatabaseSync } from "node:sqlite";
+import { expectDefined } from "@openclaw/normalization-core/expect";
 import { asOptionalRecord } from "@openclaw/normalization-core/record-coerce";
 import { expect, it, vi } from "vitest";
 import {
@@ -35,7 +36,6 @@ import {
 import { openNodeSqliteDatabase } from "../../infra/node-sqlite.js";
 import { admitSqliteSchema } from "../../infra/sqlite-schema-facts.js";
 import { readDatabasePathIdentitySync } from "../../infra/sqlite-worker-identity.js";
-import { withPluginRuntimePluginScope } from "../../plugins/runtime/gateway-request-scope.js";
 import {
   closeOpenClawAgentDatabaseByPathAsync,
   getOpenClawAgentDatabaseIfOpen,
@@ -117,14 +117,20 @@ it.each(["bounded", "anchors"] as const)(
       };
       await upsertSessionEntryCore(target, { sessionId: target.sessionId, updatedAt: 1 });
       const source = await SessionManager.openAsync(target);
-      const entryId = await source.appendMessageAsync(makeUserMessage("original", 1));
+      const entryId = expectDefined(
+        await source.appendMessageAsync(makeUserMessage("original", 1)),
+        "Expected appended message",
+      );
       if (!entryId) {
         throw new Error("Expected the appended message ID");
       }
       const otherTarget = { ...target, sessionId: "other-session", sessionKey: "agent:main:other" };
       await upsertSessionEntryCore(otherTarget, { sessionId: otherTarget.sessionId, updatedAt: 1 });
       const otherSource = await SessionManager.openAsync(otherTarget);
-      const otherEntryId = await otherSource.appendMessageAsync(makeUserMessage("other", 1));
+      const otherEntryId = expectDefined(
+        await otherSource.appendMessageAsync(makeUserMessage("other", 1)),
+        "Expected appended message",
+      );
       if (!otherEntryId) {
         throw new Error("Expected the other session's message ID");
       }
@@ -220,7 +226,7 @@ it.each(["unchanged", "append", "rewrite"] as const)(
                 if (change === "append") {
                   await source.appendMessageAsync(makeUserMessage("later", 2));
                 } else if (change === "rewrite") {
-                  source.removeTrailingEntries((entry) => entry.type === "message");
+                  await source.removeTrailingEntriesAsync((entry) => entry.type === "message");
                 }
               });
               return selected;
@@ -253,7 +259,10 @@ it("uses resident actor anchors for replay and rejects a rewritten hydrated turn
     };
     await upsertSessionEntryCore(target, { sessionId: target.sessionId, updatedAt: 1 });
     const source = await SessionManager.openAsync(target);
-    const userId = await source.appendMessageAsync(makeUserMessage("original", 1));
+    const userId = expectDefined(
+      await source.appendMessageAsync(makeUserMessage("original", 1)),
+      "Expected appended message",
+    );
     const replayView = await SessionManager.openAsync(target);
     await withSelectedTranscriptReader(
       target,
@@ -280,8 +289,9 @@ it("uses resident actor anchors for replay and rejects a rewritten hydrated turn
         try {
           expect(await replay()).toMatchObject({ entryId: userId });
           expect(validated).not.toHaveBeenCalled();
-          runWithoutOwnedSessionTranscriptWrites(() =>
-            source.removeTrailingEntries((entry) => entry.type === "message"),
+          runWithoutOwnedSessionTranscriptWrites(
+            async () =>
+              await source.removeTrailingEntriesAsync((entry) => entry.type === "message"),
           );
           await expect(replay()).rejects.toThrow(
             /Persisted user turn changed|Session transcript projection is rebuilding/,
@@ -333,7 +343,7 @@ it("refuses full context after a rewrite between validation and acceptance", asy
         pending,
         "Context validation was not reached",
       );
-      expect(source.removeTrailingEntries((entry) => entry.type === "message")).toBe(1);
+      expect(await source.removeTrailingEntriesAsync((entry) => entry.type === "message")).toBe(1);
       release.resolve();
       await expect(pending).rejects.toThrow(/transcript|context/i);
     } finally {
@@ -418,7 +428,7 @@ it.each(["key", "path"] as const)(
   },
 );
 
-it("reads full durable context through workers and preserves the deprecated synchronous result", async () => {
+it("reads full durable context through workers", async () => {
   await withOpenClawTestState({ label: "context-read-async" }, async (state) => {
     const target = {
       agentId: "main",
@@ -436,20 +446,8 @@ it("reads full durable context through workers and preserves the deprecated sync
     if (!seeded.anchor) {
       throw new Error("Missing initial transcript anchor");
     }
-    const warn = vi.spyOn(process, "emitWarning").mockImplementation(() => {});
-    let expected: unknown;
-    try {
-      withPluginRuntimePluginScope({ pluginId: "session-context-compat" }, () => {
-        expected = SessionManager.readSessionContext(target, (messages) => [...messages]);
-        expect(SessionManager.readSessionContext(target, () => 7)).toBe(7);
-      });
-      expect(warn).toHaveBeenCalledExactlyOnceWith(
-        expect.stringContaining("readSessionContextAsync"),
-        { code: "DEP_SESSION_PERSISTENCE", type: "DeprecationWarning" },
-      );
-    } finally {
-      warn.mockRestore();
-    }
+    const expected = [seeded.message];
+    expect(await SessionManager.readSessionContextAsync(target, () => 7)).toBe(7);
     const prepare = vi.spyOn(DatabaseSync.prototype, "prepare");
     const exec = vi.spyOn(DatabaseSync.prototype, "exec");
     try {
@@ -515,15 +513,24 @@ it.each(["durable", "admitted", "incognito"] as const)(
       };
       await upsertSessionEntryCore(scope, { sessionId: scope.sessionId, updatedAt: 1 });
       const seed = await SessionManager.openAsync(scope);
-      const userId = await seed.appendMessageAsync({
-        role: "user",
-        content: "question",
-        timestamp: 1,
-      });
-      const replyId = await seed.appendMessageAsync(
-        Object.assign(makeAgentAssistantMessage({ content: [{ type: "text", text: "answer" }] }), {
-          __openclaw: { upstreamUserText: "synthetic-private-native-payload" },
+      const userId = expectDefined(
+        await seed.appendMessageAsync({
+          role: "user",
+          content: "question",
+          timestamp: 1,
         }),
+        "Expected appended message",
+      );
+      const replyId = expectDefined(
+        await seed.appendMessageAsync(
+          Object.assign(
+            makeAgentAssistantMessage({ content: [{ type: "text", text: "answer" }] }),
+            {
+              __openclaw: { upstreamUserText: "synthetic-private-native-payload" },
+            },
+          ),
+        ),
+        "Expected appended message",
       );
       const manager = await SessionManager.openAsync(scope, undefined, {
         maxEvents: 20,
@@ -610,10 +617,16 @@ it.each([
       await upsertSessionEntryCore(target, { sessionId: target.sessionId, updatedAt: 1 });
       const source = await SessionManager.openAsync(target);
       await source.appendMessageAsync(makeUserMessage("question", 1));
-      const replyId = await source.appendMessageAsync(
-        Object.assign(makeAgentAssistantMessage({ content: [{ type: "text", text: "answer" }] }), {
-          __openclaw: { upstreamUserText: "private-durable-context" },
-        }),
+      const replyId = expectDefined(
+        await source.appendMessageAsync(
+          Object.assign(
+            makeAgentAssistantMessage({ content: [{ type: "text", text: "answer" }] }),
+            {
+              __openclaw: { upstreamUserText: "private-durable-context" },
+            },
+          ),
+        ),
+        "Expected appended message",
       );
       await withSelectedTranscriptReader(target, async () => {
         const manager = await SessionManager[sessionManagerOpenTranscriptCohort](
@@ -629,7 +642,7 @@ it.each([
           }
           reply.message.content = [{ type: "text", text: "unpersisted replacement" }];
         } else if (change === "native-append") {
-          source.appendMessage(makeUserMessage("native successor", 2));
+          await source.appendMessageAsync(makeUserMessage("native successor", 2));
         } else if (change === "worker-append") {
           await source.appendMessageAsync(makeUserMessage("worker successor", 2));
         }
@@ -685,9 +698,11 @@ it.each(["append", "rewrite"] as const)(
           .mockImplementationOnce(async (...args) => {
             const context = await read(...args);
             if (mutation === "rewrite") {
-              expect(source.removeTrailingEntries((entry) => entry.type === "message")).toBe(1);
+              expect(
+                await source.removeTrailingEntriesAsync((entry) => entry.type === "message"),
+              ).toBe(1);
             }
-            source.appendMessage(makeUserMessage("changed", 2));
+            await source.appendMessageAsync(makeUserMessage("changed", 2));
             changed = true;
             return context;
           });
@@ -776,7 +791,10 @@ it("keeps one bounded context snapshot and observes a foreign rewrite on the nex
     };
     await upsertSessionEntryCore(scope, { sessionId: scope.sessionId, updatedAt: 1 });
     const source = await SessionManager.openAsync(scope);
-    const userId = await source.appendMessageAsync(makeUserMessage("original", 1));
+    const userId = expectDefined(
+      await source.appendMessageAsync(makeUserMessage("original", 1)),
+      "Expected appended message",
+    );
     const databaseOptions = { agentId: scope.agentId, path: scope.storePath };
     const database = openOpenClawAgentDatabase(databaseOptions);
     const row = readTranscriptEventRows(database, scope.sessionId).find(
@@ -850,10 +868,14 @@ it.each(
         storePath: path.join(state.agentDir("main"), "openclaw-agent.sqlite"),
       };
       await upsertSessionEntryCore(scope, { sessionId: scope.sessionId, updatedAt: 1 });
-      const source = SessionManager.open(scope);
-      source.appendMessage({ role: "user", content: "completed question", timestamp: 1 });
+      const source = await SessionManager.openAsync(scope);
+      await source.appendMessageAsync({
+        role: "user",
+        content: "completed question",
+        timestamp: 1,
+      });
       await waitForSessionTranscriptProjection(scope);
-      const terminal = source.appendMessageWithTranscriptAnchor(
+      const terminal = await source.appendMessageWithTranscriptAnchorAsync(
         Object.assign(
           makeAgentAssistantMessage({
             content: [{ type: "text", text: "completed answer" }],
@@ -864,13 +886,13 @@ it.each(
       if (!terminal.anchor) {
         throw new Error("Missing completed-turn anchor");
       }
-      const expected = SessionManager.openModelContext(scope).buildSessionContext();
-      source.appendMessage({ role: "user", content: "later question", timestamp: 2 });
-      const mutate = () => {
+      const expected = (await SessionManager.openModelContextAsync(scope)).buildSessionContext();
+      await source.appendMessageAsync({ role: "user", content: "later question", timestamp: 2 });
+      const mutate = async () => {
         if (mutation === "rewrite") {
-          source.removeTrailingEntries((entry) => entry.type === "message");
+          await source.removeTrailingEntriesAsync((entry) => entry.type === "message");
         }
-        source.appendMessage({ role: "user", content: "newest question", timestamp: 3 });
+        await source.appendMessageAsync({ role: "user", content: "newest question", timestamp: 3 });
       };
       const spy = incognito
         ? undefined
@@ -879,13 +901,13 @@ it.each(
             .mockImplementationOnce(async (...args) => {
               spy!.mockRestore();
               const result = await contextWorker.readSessionTranscriptModelContextInWorker(...args);
-              mutate();
+              await mutate();
               return result;
             });
       try {
         const pending = SessionManager.openModelContextAsync(scope, { through: terminal.anchor });
         if (incognito) {
-          mutate();
+          await mutate();
         }
         if (mutation === "rewrite") {
           await expect(pending).rejects.toThrow(/transcript|anchor/i);

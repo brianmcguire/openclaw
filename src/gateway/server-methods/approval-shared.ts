@@ -365,12 +365,10 @@ export async function handlePendingApprovalRequest<
     const approvalEvents = params.context.approvalEvents;
     let internalApprovalSubscriberCount = 0;
     if (!suppressDelivery && !approvalClientsOnly && approvalEvents) {
-      internalApprovalSubscriberCount = approvalEvents.publishRequestedAsync
-        ? await approvalEvents.publishRequestedAsync(
-            params.approvalKind ?? "exec",
-            params.requestEvent,
-          )
-        : approvalEvents.publishRequested(params.approvalKind ?? "exec", params.requestEvent);
+      internalApprovalSubscriberCount = await approvalEvents.publishRequestedAsync(
+        params.approvalKind ?? "exec",
+        params.requestEvent,
+      );
     }
 
     if (!params.manager.isPendingDeliveryCurrent(params.record)) {

@@ -529,7 +529,7 @@ describe("runDoctorSessionSqlite", () => {
         sessionId: "session-1",
       }),
     ).toEqual(["session-1", "user-1", "reply-1"].map((id) => expect.objectContaining({ id })));
-    const manager = SessionManager.open(
+    const manager = await SessionManager.openAsync(
       {
         agentId: "main",
         sessionId: "session-1",
@@ -538,7 +538,7 @@ describe("runDoctorSessionSqlite", () => {
       },
       store.tempDir,
     );
-    manager.appendMessage({
+    await manager.appendMessageAsync({
       role: "user",
       content: "history written after the upgrade",
       timestamp: Date.now(),

@@ -3,7 +3,7 @@ import { afterAll, afterEach, describe, expect, it, vi } from "vitest";
 import { upsertSessionEntryCore } from "../config/sessions/session-accessor.js";
 import * as sessionReader from "../config/sessions/session-entry-read-runtime.js";
 import type { OpenClawConfig } from "../config/types.openclaw.js";
-import { buildWatchedSessionsHarnessContext } from "../plugin-sdk/agent-harness-runtime.js";
+import { prepareWatchedSessionsHarnessContext } from "../plugin-sdk/agent-harness-runtime.js";
 import {
   handleSessionStateSessionReset,
   registerMainSessionGroupWatch,
@@ -12,14 +12,10 @@ import { resolveOpenClawAgentSqlitePath } from "../state/openclaw-agent-db.paths
 import * as stateRead from "../state/openclaw-state-db-readonly.js";
 import { observeMainThreadSql } from "../test-utils/main-thread-sql-spies.test-support.js";
 import { useSessionStoreTempDirs } from "../test-utils/session-state-cleanup.js";
-import {
-  buildWatchedSessionsPromptLines,
-  prepareWatchedSessionsPrompt as prepareWatchedSessionsPromptSync,
-  prepareWatchedSessionsPromptAsync,
-} from "./watched-sessions-prompt.js";
+import { prepareWatchedSessionsPromptAsync } from "./watched-sessions-prompt.js";
 
 const prepareWatchedSessionsPrompt = (
-  params: Parameters<typeof prepareWatchedSessionsPromptSync>[0],
+  params: Omit<Parameters<typeof prepareWatchedSessionsPromptAsync>[0], "assertCurrent">,
 ) => prepareWatchedSessionsPromptAsync({ ...params, assertCurrent: () => {} });
 
 const sessionDirs = useSessionStoreTempDirs(afterAll, "openclaw-watched-sessions-");
@@ -81,16 +77,8 @@ describe("prepareWatchedSessionsPrompt", () => {
     const sql = observeMainThreadSql();
     let prepared;
     try {
-      // The released sync implementation is the pre-cutover golden and proves
-      // this instrumentation sees both original reads on the caller thread.
-      const original = prepareWatchedSessionsPromptSync(input);
-      expect(sql.count()).toBeGreaterThan(0);
-      sql.clear();
       prepared = await prepareWatchedSessionsPrompt(input);
       sql.expectIdle();
-      expect(buildWatchedSessionsPromptLines(prepared).join("\n")).toBe(
-        buildWatchedSessionsPromptLines(original).join("\n"),
-      );
     } finally {
       sql.restore();
     }
@@ -255,9 +243,10 @@ describe("prepareWatchedSessionsPrompt", () => {
     stubStateDir();
     await watchGroup("agent:main:telegram:group:beta");
 
-    const block = buildWatchedSessionsHarnessContext({
+    const block = await prepareWatchedSessionsHarnessContext({
       sessionKey: mainSessionKey,
       toolNames: ["sessions_history"],
+      assertCurrent: () => {},
     });
 
     expect(block).toBe(
@@ -267,8 +256,12 @@ describe("prepareWatchedSessionsPrompt", () => {
         "- agent:main:telegram:group:beta",
       ].join("\n"),
     );
-    expect(buildWatchedSessionsHarnessContext({ sessionKey: mainSessionKey, toolNames: [] })).toBe(
-      undefined,
-    );
+    expect(
+      await prepareWatchedSessionsHarnessContext({
+        sessionKey: mainSessionKey,
+        toolNames: [],
+        assertCurrent: () => {},
+      }),
+    ).toBe(undefined);
   });
 });

@@ -346,7 +346,7 @@ it("prepares real Active Memory prompt and status hooks from the actor SDK witho
   };
   const runtime = createPluginRuntime();
   runtime.config.current = () => config;
-  runtime.agent.resolveCliBackendDispatchEligibility = () => undefined;
+  runtime.agent.resolveCliBackendDispatchEligibilityAsync = async () => undefined;
   runtime.state.openKeyedStore = (options) =>
     createPluginStateKeyedStoreForTests("active-memory", { ...options, env });
   let beforePrompt: PluginHookHandlerMap["before_prompt_build"] | undefined;

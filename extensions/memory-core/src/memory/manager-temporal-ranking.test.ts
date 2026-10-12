@@ -3,7 +3,7 @@ import path from "node:path";
 import type { MemorySearchResult } from "openclaw/plugin-sdk/memory-core-host-engine-storage";
 import { resolveSessionTranscriptsDirForAgent } from "openclaw/plugin-sdk/memory-core-host-runtime-core";
 import { deleteSessionEntry, upsertSessionEntry } from "openclaw/plugin-sdk/session-store-runtime";
-import { openOpenClawAgentDatabase } from "openclaw/plugin-sdk/sqlite-runtime";
+import { openOpenClawAgentDatabase } from "openclaw/plugin-sdk/sqlite-runtime-testing";
 import { describe, expect, it } from "vitest";
 import { createMemorySearchToolOrThrow } from "../tools.test-helpers.js";
 import { createManagerIndexFixture } from "./manager-index.test-support.js";

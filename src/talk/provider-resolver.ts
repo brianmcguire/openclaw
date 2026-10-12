@@ -6,7 +6,6 @@
  */
 import type { OpenClawConfig } from "../config/types.openclaw.js";
 import {
-  resolveConfiguredCapabilityProvider,
   resolveConfiguredCapabilityProviderAsync,
   type ResolvedConfiguredProvider,
 } from "../plugin-sdk/provider-selection-runtime.js";
@@ -93,33 +92,6 @@ function resolveRealtimeVoiceProviderCapabilities(
           })
         : undefined;
   return capabilities || params.provider.capabilities;
-}
-
-function isRealtimeVoiceProviderConfigured(params: RealtimeVoiceProviderContext): boolean {
-  const internalConfigured =
-    params.surface === "browser-session"
-      ? readInternalRealtimeVoiceProviderApi(params.provider)?.isBrowserSessionConfigured({
-          cfg: params.cfg,
-          providerConfig: params.providerConfig,
-          agentId: params.agentId,
-        })
-      : params.surface === "gateway-relay"
-        ? readInternalRealtimeVoiceProviderApi(params.provider)?.isGatewayRelayConfigured?.({
-            cfg: params.cfg,
-            providerConfig: params.providerConfig,
-            agentId: params.agentId,
-          })
-        : undefined;
-  if (internalConfigured !== undefined) {
-    return internalConfigured;
-  }
-  return (
-    params.provider.isConfigured?.({
-      cfg: params.cfg,
-      agentId: params.agentId,
-      providerConfig: params.providerConfig,
-    }) ?? false
-  );
 }
 
 export async function resolveRealtimeVoiceProviderCapabilitiesAsync(
@@ -233,42 +205,6 @@ function requireRealtimeVoiceProvider(
     throw new Error(`Realtime voice provider "${resolution.provider?.id}" is not configured`);
   }
   return resolution;
-}
-
-/** @deprecated Use resolveConfiguredRealtimeVoiceProviderAsync for stored-credential providers. */
-export function resolveConfiguredRealtimeVoiceProvider(
-  params: ResolveConfiguredRealtimeVoiceProviderParams,
-): ResolvedRealtimeVoiceProvider {
-  const resolution = requireRealtimeVoiceProvider(
-    resolveConfiguredCapabilityProvider({
-      ...prepareRealtimeVoiceProviderSelection(params),
-      resolveProviderConfig: ({ provider, cfg, rawConfig }) => {
-        const context = prepareRealtimeVoiceProviderConfig(params, provider, cfg, rawConfig);
-        return provider.resolveConfig?.(context) ?? context.rawConfig;
-      },
-      isProviderConfigured: ({ provider, cfg, providerConfig }) =>
-        isRealtimeVoiceProviderConfigured({
-          provider,
-          cfg,
-          providerConfig,
-          agentId: params.agentId,
-          surface: params.surface,
-        }),
-    }),
-    params,
-  );
-  return {
-    provider: resolution.provider,
-    providerConfig: resolution.providerConfig,
-    capabilities: resolveRealtimeVoiceProviderCapabilities({
-      provider: resolution.provider,
-      providerConfig: resolution.providerConfig,
-      cfg: params.cfg,
-      agentId: params.agentId,
-      surface: params.surface,
-      clientControl: params.clientControl,
-    }),
-  };
 }
 
 export async function resolveConfiguredRealtimeVoiceProviderAsync(

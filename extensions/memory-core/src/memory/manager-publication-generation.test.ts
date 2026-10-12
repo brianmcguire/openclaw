@@ -1,12 +1,12 @@
 import path from "node:path";
 import { deserialize } from "node:v8";
 import { Worker } from "node:worker_threads";
+import { readOpenClawAgentDatabaseIdentity } from "openclaw/plugin-sdk/sqlite-runtime";
 import {
+  observeHostDataSql,
   borrowOpenClawAgentDatabase,
-  readOpenClawAgentDatabaseIdentity,
   withOpenClawAgentDatabaseWrite,
-} from "openclaw/plugin-sdk/sqlite-runtime";
-import { observeHostDataSql } from "openclaw/plugin-sdk/sqlite-runtime-testing";
+} from "openclaw/plugin-sdk/sqlite-runtime-testing";
 import { withOpenClawTestState } from "openclaw/plugin-sdk/test-state";
 import { expect, it, vi } from "vitest";
 import { MemoryIndexDatabase } from "./manager-database-context.js";

@@ -1,5 +1,4 @@
 import path from "node:path";
-import { isMainThread } from "node:worker_threads";
 import {
   readAmbientTranscriptWatermarkFromEntry,
   resolveAmbientTranscriptWatermarkKey,
@@ -7,10 +6,7 @@ import {
   type AmbientTranscriptWatermarkScope,
 } from "../config/sessions/ambient-transcript-watermark.js";
 import { buildConversationIdentity } from "../config/sessions/conversation-identity.js";
-import {
-  resolveCurrentConversationSession,
-  resolveCurrentConversationSessionAsync,
-} from "../config/sessions/conversation-registry.js";
+import { resolveCurrentConversationSessionAsync } from "../config/sessions/conversation-registry.js";
 import {
   resolveExplicitSessionStorePathForScope,
   resolveSessionStorePathCore,
@@ -24,8 +20,6 @@ import {
   listSessionEntriesReadOnly as listAccessorSessionEntriesReadOnly,
   loadSessionEntryReadOnly,
   patchSessionEntryCore as patchAccessorSessionEntry,
-  readSessionUpdatedAtCore as readAccessorSessionUpdatedAt,
-  readTranscriptStatsSync as readAccessorTranscriptStatsSync,
   updateSessionEntry,
 } from "../config/sessions/session-accessor.js";
 import {
@@ -174,8 +168,8 @@ export function getSessionEntry(params: SessionStoreReadParams): SessionEntry | 
   return entry ? projectPluginSessionEntry(entry) : undefined;
 }
 
-/** @deprecated Use getConversationSessionAsync. Removed at the next Plugin SDK major. */
-export function getConversationSession(params: {
+/** Reads the current binding of one canonical transport address off the Gateway thread. */
+export async function getConversationSessionAsync(params: {
   agentId: string;
   env?: NodeJS.ProcessEnv;
   storePath?: string;
@@ -184,20 +178,7 @@ export function getConversationSession(params: {
   kind: "channel" | "direct" | "group";
   peerId: string;
   threadId?: string;
-}): { sessionKey: string; sessionId: string } | undefined {
-  warnPluginSdkDeprecation({
-    family: "session-conversation",
-    method: "getConversationSession",
-    replacement: "getConversationSessionAsync",
-  });
-  const identity = buildConversationIdentity({ ...params, deliveryTarget: params.peerId });
-  return identity ? resolveCurrentConversationSession(params, identity.conversationRef) : undefined;
-}
-
-/** Reads the current binding of one canonical transport address off the Gateway thread. */
-export async function getConversationSessionAsync(
-  params: Parameters<typeof getConversationSession>[0],
-): Promise<{ sessionKey: string; sessionId: string } | undefined> {
+}): Promise<{ sessionKey: string; sessionId: string } | undefined> {
   const identity = buildConversationIdentity({ ...params, deliveryTarget: params.peerId });
   return identity
     ? resolveCurrentConversationSessionAsync(params, identity.conversationRef)
@@ -257,31 +238,15 @@ export const loadTranscriptEventsSync: (params: {
   storePath?: string;
 }) => SessionStoreTranscriptEvent[] = loadAccessorTranscriptEventsSync;
 
-/** @deprecated Use readTranscriptStatsAsync; removed in the next Plugin SDK major. */
-function readSessionStoreTranscriptStatsSync(params: {
+/** Reads transcript statistics through the existing session worker. */
+export const readTranscriptStatsAsync: (params: {
   agentId?: string;
   env?: NodeJS.ProcessEnv;
   sessionId: string;
   sessionKey?: string;
   storePath?: string;
-}): { eventCount: number; maxSeq: number; sizeBytes: number } {
-  if (isMainThread) {
-    warnPluginSdkDeprecation({
-      family: "session-store",
-      method: "readTranscriptStatsSync",
-      replacement: "readTranscriptStatsAsync",
-    });
-  }
-  return readAccessorTranscriptStatsSync(params);
-}
-
-/** Reads transcript statistics through the existing session worker. */
-export const readTranscriptStatsAsync: (
-  params: Parameters<typeof readSessionStoreTranscriptStatsSync>[0],
-) => Promise<ReturnType<typeof readSessionStoreTranscriptStatsSync>> =
+}) => Promise<{ eventCount: number; maxSeq: number; sizeBytes: number }> =
   readAccessorTranscriptStatsAsync;
-
-export { readSessionStoreTranscriptStatsSync as readTranscriptStatsSync };
 
 /** Resolves the persisted session key for one SQLite transcript identity. */
 export { resolveTranscriptSessionKeyBySessionId } from "../config/sessions/session-accessor.js";
@@ -394,11 +359,6 @@ function sessionEntryPatchOptions(params: Omit<PrepareSessionEntryPatchParams, "
   };
 }
 
-/** @deprecated Use readSessionUpdatedAtAsync. Removed at the next Plugin SDK major. */
-export function readSessionUpdatedAt(params: SessionStoreReadParams): number | undefined {
-  return readAccessorSessionUpdatedAt(toSessionAccessScope(params));
-}
-
 /** Reads the last activity timestamp without creating a missing session store. */
 export function readSessionUpdatedAtAsync(
   params: SessionStoreReadParams,
@@ -408,18 +368,6 @@ export function readSessionUpdatedAtAsync(
 
 export { resolveAmbientTranscriptWatermarkKey, updateAmbientTranscriptWatermark };
 export type { AmbientTranscriptWatermarkScope };
-
-/** @deprecated Use readAmbientTranscriptWatermarkAsync. Removed at the next Plugin SDK major. */
-export function readAmbientTranscriptWatermark(
-  params: ReadAmbientTranscriptWatermarkParams,
-): AmbientTranscriptWatermark | undefined {
-  warnPluginSdkDeprecation({
-    family: "session-store",
-    method: "readAmbientTranscriptWatermark",
-    replacement: "readAmbientTranscriptWatermarkAsync",
-  });
-  return readAmbientTranscriptWatermarkFromEntry(getSessionEntry(params), params.key);
-}
 
 /** Reads the transcript watermark through the session owner's worker. */
 export async function readAmbientTranscriptWatermarkAsync(
@@ -594,18 +542,8 @@ export { isValidAgentHarnessSessionStoreEntry } from "../sessions/agent-harness-
 export { recordInboundSessionMeta as recordSessionMetaFromInbound } from "../config/sessions/session-accessor.js";
 
 export function updateLastRoute(
-  params: UpdateSessionLastRouteParams & {
-    /** @deprecated Use updateLastRouteWithAuthority; removed in the next Plugin SDK major. */
-    assertCommitAllowed?: () => void;
-  },
+  params: UpdateSessionLastRouteParams,
 ): Promise<SessionEntry | null> {
-  if (params.assertCommitAllowed) {
-    warnPluginSdkDeprecation({
-      family: "session-store",
-      method: "updateLastRoute.assertCommitAllowed",
-      replacement: "updateLastRouteWithAuthority",
-    });
-  }
   return updateSessionLastRoute(params);
 }
 

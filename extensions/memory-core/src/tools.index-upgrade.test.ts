@@ -3,10 +3,10 @@ import path from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { createDeferred } from "openclaw/plugin-sdk/extension-shared";
 import { MEMORY_CHUNKING_VERSION } from "openclaw/plugin-sdk/memory-core-host-engine-storage";
-import { openOpenClawAgentDatabase } from "openclaw/plugin-sdk/sqlite-runtime";
 import {
   closeOpenClawAgentDatabasesAsync,
   closeOpenClawAgentDatabasesForTest,
+  openOpenClawAgentDatabase,
 } from "openclaw/plugin-sdk/sqlite-runtime-testing";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { MemoryIndexDatabase } from "./memory/manager-database-context.js";

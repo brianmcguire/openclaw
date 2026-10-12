@@ -1,7 +1,6 @@
 import { isPromiseLike } from "@openclaw/normalization-core/promise-like";
 import {
   resolveSessionTranscriptRuntimeTarget,
-  withTranscriptWriteLock,
   withTranscriptWriteSequence,
   type SessionTranscriptWriteLockAccessorContext,
   type TranscriptMessageAppendOptions,
@@ -9,7 +8,6 @@ import {
   type TranscriptUpdatePayload,
 } from "../config/sessions/session-accessor.js";
 import type { LockedTranscriptMessageAppendOptions } from "../config/sessions/session-accessor.types.js";
-import { assertLegacyTranscriptPreparation } from "../config/sessions/session-transcript-preparation.js";
 import { normalizeAgentId } from "../routing/session-key.js";
 import {
   formatSessionTranscriptMemoryHitKey,
@@ -50,11 +48,7 @@ export async function withProjectedSessionTranscriptWriteLock<
     context: InternalSessionTranscriptWriteLockContext,
     locked: SessionTranscriptWriteLockAccessorContext,
   ) => TContext,
-  mode: "lock" | "sequence" = "lock",
 ): Promise<T> {
-  if (mode === "lock") {
-    assertLegacyTranscriptPreparation(params);
-  }
   const storageTarget = await resolveSessionTranscriptRuntimeTarget(params, params.config);
   const agentId = normalizeAgentId(storageTarget.agentId);
   const target: InternalSessionTranscriptTarget = {
@@ -103,8 +97,7 @@ export async function withProjectedSessionTranscriptWriteLock<
       callbackClosed = true;
     }
   };
-  const write = mode === "sequence" ? withTranscriptWriteSequence : withTranscriptWriteLock;
-  return await write(boundScope, async (locked) => {
+  return await withTranscriptWriteSequence(boundScope, async (locked) => {
     const result = await runOpen(
       projectContext(
         {

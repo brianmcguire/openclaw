@@ -396,8 +396,6 @@ export type PluginRuntimeCore = {
      * registered backend, stored credential mode) so opted-in callers can
      * budget timeouts for the run that will actually execute.
      */
-    /** @deprecated Use resolveCliBackendDispatchEligibilityAsync. Removed at the next Plugin SDK major. */
-    resolveCliBackendDispatchEligibility: typeof import("../../agents/embedded-agent-runner/cli-backend-dispatch-eligibility.js").resolveEmbeddedCliBackendDispatchEligibility;
     resolveCliBackendDispatchEligibilityAsync: typeof import("../../agents/embedded-agent-runner/cli-backend-dispatch-eligibility.js").resolveEmbeddedCliBackendDispatchEligibilityAsync;
     ensureAgentWorkspace: typeof import("./runtime-agent-workspace.js").ensurePluginAgentWorkspace;
     session: {

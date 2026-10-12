@@ -152,9 +152,6 @@ export function createPluginRuntimeMock(overrides: PluginRuntimeMockOverrides = 
         PluginRuntime["agent"]["resolveSessionCatalogCreateTarget"]
       >(resolveAgentCatalogCreateTarget),
       resolveThinkingDefault: vi.fn<PluginRuntime["agent"]["resolveThinkingDefault"]>(() => "off"),
-      resolveCliBackendDispatchEligibility: vi.fn<
-        PluginRuntime["agent"]["resolveCliBackendDispatchEligibility"]
-      >(() => undefined),
       resolveCliBackendDispatchEligibilityAsync: vi.fn<
         PluginRuntime["agent"]["resolveCliBackendDispatchEligibilityAsync"]
       >(async () => undefined),

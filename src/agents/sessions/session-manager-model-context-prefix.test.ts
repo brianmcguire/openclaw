@@ -47,8 +47,9 @@ it("keeps complete history prefixes across appends and restarts the window after
       messages: Array.from({ length: 30 }, (_, index) => turn(index)).flat(),
     });
     const limits = { maxBytes: 16_384, maxEvents: 1000 };
-    const read = () => SessionManager.openModelContext(scope, { limits }).buildSessionContext();
-    let previous = read().messages;
+    const read = async () =>
+      (await SessionManager.openModelContextAsync(scope, { limits })).buildSessionContext();
+    let previous = (await read()).messages;
     expect(previous.length).toBeLessThan(90);
     let consecutive = 1;
     let longest = 1;
@@ -56,7 +57,7 @@ it("keeps complete history prefixes across appends and restarts the window after
     for (let index = 30; index < 40; index++) {
       await appendTranscriptMessages(scope, { messages: turn(index) });
       // Each read creates a fresh detached manager: no process-local cutoff can supply stability.
-      const current = read().messages;
+      const current = (await read()).messages;
       expect(Buffer.byteLength(JSON.stringify(current))).toBeLessThan(limits.maxBytes);
       expect(current[0]?.role).toBe("user");
       for (let offset = 0; offset < current.length; offset += 3) {
@@ -82,18 +83,20 @@ it("keeps complete history prefixes across appends and restarts the window after
     expect(longest).toBeGreaterThanOrEqual(3);
     expect(steps).toBeGreaterThan(0);
 
-    const source = SessionManager.open(scope);
-    source.appendCompaction("Earlier turns summarized", "turn-39-user", 100);
-    expect(read().messages).toEqual(source.buildSessionContext().messages);
-    source.appendResetBoundary("new");
-    expect(read().messages).toEqual([]);
-    source.appendMessage({ role: "user", content: "fresh start", timestamp: 40 });
-    expect(read().messages).toEqual([{ role: "user", content: "fresh start", timestamp: 40 }]);
-    source.appendMessage({ role: "user", content: "old".repeat(700), timestamp: 41 });
+    const source = await SessionManager.openAsync(scope);
+    await source.appendCompactionAsync("Earlier turns summarized", "turn-39-user", 100);
+    expect((await read()).messages).toEqual(source.buildSessionContext().messages);
+    await source.appendResetBoundaryAsync("new");
+    expect((await read()).messages).toEqual([]);
+    await source.appendMessageAsync({ role: "user", content: "fresh start", timestamp: 40 });
+    expect((await read()).messages).toEqual([
+      { role: "user", content: "fresh start", timestamp: 40 },
+    ]);
+    await source.appendMessageAsync({ role: "user", content: "old".repeat(700), timestamp: 41 });
     await appendTranscriptMessages(scope, { messages: turn(42, 14_500) });
     // Headroom must not reject an atomic tool turn that fits the unchanged hard cap.
-    expect(read().messages).toEqual(
-      SessionManager.openModelContext(scope).buildSessionContext().messages.slice(-3),
+    expect((await read()).messages).toEqual(
+      (await SessionManager.openModelContextAsync(scope)).buildSessionContext().messages.slice(-3),
     );
   });
 });

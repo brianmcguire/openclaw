@@ -16,11 +16,7 @@ import {
 import { resolveRuntimeWorkerUrl } from "openclaw/plugin-sdk/process-runtime";
 import { resolveStorePath } from "openclaw/plugin-sdk/session-store-paths";
 import { upsertSessionEntry } from "openclaw/plugin-sdk/session-store-runtime";
-import {
-  openOpenClawAgentDatabase,
-  resolveOpenClawAgentSqlitePath,
-  runOpenClawAgentWriteAdmission,
-} from "openclaw/plugin-sdk/sqlite-runtime";
+import { resolveOpenClawAgentSqlitePath } from "openclaw/plugin-sdk/sqlite-runtime";
 import * as sqliteRuntime from "openclaw/plugin-sdk/sqlite-runtime";
 import {
   closeOpenClawAgentDatabasesAsync,
@@ -28,6 +24,8 @@ import {
   closeOpenClawStateDatabaseAsync,
   closeOpenClawStateDatabaseForTest,
   observeHostDataSql,
+  openOpenClawAgentDatabase,
+  runOpenClawAgentWriteAdmission,
 } from "openclaw/plugin-sdk/sqlite-runtime-testing";
 import { useAutoCleanupTempDirTracker } from "openclaw/plugin-sdk/test-env";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";

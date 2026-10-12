@@ -135,7 +135,6 @@ export {
   listRealtimeVoiceProviders,
 } from "../talk/provider-registry.js";
 export {
-  resolveConfiguredRealtimeVoiceProvider,
   resolveConfiguredRealtimeVoiceProviderAsync,
   type ResolvedRealtimeVoiceProvider,
 } from "../talk/provider-resolver.js";

@@ -29,7 +29,6 @@ import {
   SessionTranscriptWriterClaimReboundError,
   withSessionTranscriptWriteAssertion,
 } from "../config/sessions/transcript-write-context.js";
-import { createGatewayMetadataCloseFixture } from "../gateway/server-close.metadata.test-support.js";
 import * as admission from "../infra/sqlite-worker-operation-admission.js";
 import { sqliteWorkerOwnerProbe as probe } from "../infra/sqlite-worker-owner-probe.test-support.js";
 import { buildConversationRef } from "../routing/conversation-ref.js";
@@ -39,17 +38,13 @@ import {
   openOpenClawAgentDatabase,
 } from "../state/openclaw-agent-db.js";
 import { withOpenClawTestState } from "../test-utils/openclaw-test-state.js";
-import {
-  withCodexSessionTranscriptMirrorWrite,
-  withCodexSessionTranscriptMirrorWriteLock,
-} from "./codex-session-transcript-runtime.js";
+import { withCodexSessionTranscriptMirrorWrite } from "./codex-session-transcript-runtime.js";
 import {
   appendAssistantMirrorMessageByIdentity,
   appendSessionTranscriptMessageByIdentity,
   composeSessionTranscriptWriteAssertion,
   withSessionTranscriptWrite,
-  withSessionTranscriptWriteLock,
-  type SessionTranscriptWriteLockContext,
+  type SessionTranscriptWriteContext,
 } from "./session-transcript-runtime.js";
 
 async function seed(env: NodeJS.ProcessEnv, locator: "physical" | "logical" = "physical") {
@@ -206,7 +201,7 @@ it.each(["physical", "logical"] as const)(
       await replaceSessionEntry(other, { sessionId: other.sessionId, updatedAt: 1 });
       await expect(
         withSessionTranscriptWriteAssertion(scope, composeSessionTranscriptWriteAssertion([]), () =>
-          withSessionTranscriptWriteLock(other, (locked) =>
+          withSessionTranscriptWrite(other, (locked) =>
             locked.appendMessage({ message: { role: "assistant", content: "wrong target" } }),
           ),
         ),
@@ -243,7 +238,7 @@ it.each(["physical", "logical"] as const)(
           sessionKey: scope.sessionKey,
         });
       });
-      let retainedFacts: SessionTranscriptWriteLockContext["readMessageFacts"] | undefined;
+      let retainedFacts: SessionTranscriptWriteContext["readMessageFacts"] | undefined;
       await withSessionTranscriptWrite(scope, async (transcript) => {
         retainedFacts = transcript.readMessageFacts;
         const facts = await transcript.readMessageFacts(query);
@@ -267,7 +262,7 @@ it.each(["locked", "mirror"] as const)(
       const sql = observeHostDataSql();
       try {
         if (kind === "locked") {
-          await withSessionTranscriptWriteLock(request, async (locked) => {
+          await withSessionTranscriptWrite(request, async (locked) => {
             expect(await locked.readEvents()).toEqual([]);
             await locked.appendMessage({ message: { role: "assistant", content: "locked" } });
           });
@@ -311,12 +306,12 @@ it.each([
       const off = onInternalSessionTranscriptUpdate((update) => updates.push(update));
       try {
         await withSessionTranscriptWriteAssertion(scope, authority, () =>
-          withCodexSessionTranscriptMirrorWriteLock(scope, async (locked) => {
+          withCodexSessionTranscriptMirrorWrite(scope, async (locked) => {
             const appended = await locked.appendMessageWithMessageSequence({
               eventId: "owned",
               message: { role: "assistant", content: "owned", idempotencyKey: "owned" },
               ...(adapter === "preparer"
-                ? { prepareMessageAfterIdempotencyCheck: (message: unknown) => message }
+                ? { preparation: { prepareMessage: async (message: unknown) => message } }
                 : {}),
             });
             expect(appended.result?.messageId).toBe("owned");
@@ -380,7 +375,7 @@ it.each([
         idempotencyKey: "prepared-grant",
       };
       if (replay) {
-        await withSessionTranscriptWriteLock(scope, (locked) =>
+        await withSessionTranscriptWrite(scope, (locked) =>
           locked.appendMessage({ eventId: "prepared-grant", message }),
         );
       }
@@ -525,11 +520,11 @@ it.each(["owned", "fresh"] as const)(
         },
       );
       const write = () =>
-        withSessionTranscriptWriteLock(scope, (locked) =>
+        withSessionTranscriptWrite(scope, (locked) =>
           locked.appendMessage({
             eventId: "matched-source",
             message: { role: "assistant", content: "authorized conversation" },
-            ...(authorityKind === "fresh" ? { beforeFreshMessageCommit: guard } : {}),
+            ...(authorityKind === "fresh" ? { preparation: { source: guard } } : {}),
           }),
         );
       const sql = observeHostDataSql();
@@ -559,7 +554,7 @@ it("refuses a read-only locked result after its database owner is revoked", asyn
     const entered = createDeferred();
     const release = createDeferred();
     let closing: Promise<boolean> | undefined;
-    const reading = withSessionTranscriptWriteLock(scope, async (locked) => {
+    const reading = withSessionTranscriptWrite(scope, async (locked) => {
       const events = await locked.readEvents();
       expect(events).toContainEqual(expect.objectContaining({ id: "before-close" }));
       entered.resolve();
@@ -593,15 +588,17 @@ it("joins accepted appends in FIFO order before admitting feedback after the cal
     const release = createDeferred();
     const accepted: Promise<unknown>[] = [];
     let feedback: Promise<boolean> | undefined;
-    const writing = withSessionTranscriptWriteLock(scope, (locked) => {
+    const writing = withSessionTranscriptWrite(scope, (locked) => {
       accepted.push(
         locked.appendMessage({
           eventId: "first",
           message: { role: "assistant", content: "first" },
-          prepareMessageAfterIdempotencyCheckAsync: async (message) => {
-            entered.resolve();
-            await release.promise;
-            return message;
+          preparation: {
+            prepareMessage: async (message) => {
+              entered.resolve();
+              await release.promise;
+              return message;
+            },
           },
         }),
       );
@@ -656,13 +653,15 @@ it.each(["physical", "logical"] as const)(
             }
           }),
           () =>
-            withSessionTranscriptWriteLock(scope, (locked) =>
+            withSessionTranscriptWrite(scope, (locked) =>
               locked.appendMessage({
                 eventId: "revoked",
                 message: { role: "assistant", content: "must not persist" },
-                prepareMessageAfterIdempotencyCheckAsync: async (message) => {
-                  current = false;
-                  return message;
+                preparation: {
+                  prepareMessage: async (message) => {
+                    current = false;
+                    return message;
+                  },
                 },
               }),
             ),
@@ -732,7 +731,7 @@ it("retains a committed append but suppresses queued publication when its callba
     const off = onInternalSessionTranscriptUpdate((update) => updates.push(update));
     try {
       await expect(
-        withSessionTranscriptWriteLock(scope, async (locked) => {
+        withSessionTranscriptWrite(scope, async (locked) => {
           await locked.appendMessage({
             eventId: "committed",
             message: { role: "assistant", content: "durable but failed" },
@@ -746,210 +745,5 @@ it("retains a committed append but suppresses queued publication when its callba
     } finally {
       off();
     }
-  });
-});
-
-it.for(["worker", "native"] as const)(
-  "settles two unawaited %s appends FIFO across the real Gateway close prelude",
-  async (kind, { signal }) => {
-    const fixture = await createGatewayMetadataCloseFixture(`gateway-${kind}-locked-close`);
-    const entered = createDeferred();
-    const release = createDeferred();
-    const prelude = createDeferred();
-    const accepted: Promise<unknown>[] = [];
-    let writing: Promise<unknown> | undefined;
-    let closing: Promise<void> | undefined;
-    let retained: SessionTranscriptWriteLockContext | undefined;
-    try {
-      const port = await fixture.reservePort();
-      const server = await fixture.start(port);
-      const kernel = fixture.kernels.get(port);
-      assert(kernel);
-      const scope = await seed(fixture.state.env);
-      const database = openOpenClawAgentDatabase(scope);
-      const order: string[] = [];
-      let checkedAfterAbort = false;
-      const assertCurrent = () => {
-        expect(database.db.isOpen).toBe(true);
-        checkedAfterAbort ||= kernel.scheduler.signal.aborted;
-      };
-      // Opaque released SDK authority retains the native adapter; prepared authority uses the worker.
-      const authority =
-        kind === "native"
-          ? assertCurrent
-          : composeSessionTranscriptWriteAssertion([], assertCurrent);
-      vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "Date"] });
-      kernel.scheduler.schedule({
-        id: "accepted-locked-append",
-        delayMs: 0,
-        async run() {
-          writing = withSessionTranscriptWriteAssertion(scope, authority, () =>
-            withSessionTranscriptWriteLock(scope, (locked) => {
-              retained = locked;
-              const prepareFirst = async (message: unknown) => {
-                if (kind === "native") {
-                  expect(database.db.isTransaction).toBe(false);
-                }
-                entered.resolve();
-                await release.promise;
-                return message;
-              };
-              for (const eventId of ["first", "second"]) {
-                accepted.push(
-                  locked
-                    .appendMessage({
-                      eventId,
-                      message: { role: "assistant", content: eventId },
-                      prepareMessageAfterIdempotencyCheckAsync:
-                        eventId === "first" ? prepareFirst : undefined,
-                      ...(kind === "native"
-                        ? {
-                            beforeFreshMessageCommit: () => {
-                              expect(database.db.isTransaction).toBe(true);
-                              order.push(eventId);
-                            },
-                          }
-                        : {}),
-                    })
-                    .then((result) => {
-                      if (kind === "worker") {
-                        order.push(eventId);
-                      }
-                      return result;
-                    }),
-                );
-              }
-              return "callback returned";
-            }),
-          );
-          expect(await writing).toBe("callback returned");
-          expect(database.db.isOpen).toBe(true);
-        },
-      });
-      await vi.advanceTimersByTimeAsync(0);
-      vi.useRealTimers();
-      assert(writing);
-      await withinTest(
-        awaitGateBeforeSettlement(entered.promise, writing, "Lock was not admitted"),
-        signal,
-      );
-      kernel.scheduler.signal.addEventListener("abort", () => prelude.resolve(), { once: true });
-      closing = server.close({ reason: "accepted locked append close proof" });
-      await withinTest(
-        awaitGateBeforeSettlement(prelude.promise, closing, "Gateway skipped close prelude"),
-        signal,
-      );
-      expect(kernel.scheduler.signal.aborted).toBe(true);
-      assert(retained);
-      await expect(retained.publishUpdate()).rejects.toThrow("context is closed");
-      await expect(retained.readEvents()).rejects.toThrow("context is closed");
-      expect(order).toEqual([]);
-      expect(database.db.isOpen).toBe(true);
-      release.resolve();
-      await withinTest(Promise.all([writing, closing, ...accepted]), signal);
-      if (kind === "worker") {
-        expect(checkedAfterAbort).toBe(true);
-      }
-      expect(order).toEqual(["first", "second"]);
-      expect(database.db.isOpen).toBe(false);
-      const reopened = new DatabaseSync(database.path, { readOnly: true });
-      try {
-        const rows = reopened
-          .prepare("SELECT event_json FROM transcript_events WHERE session_id = ? ORDER BY seq")
-          .all(scope.sessionId);
-        expect(
-          rows.map((row) => {
-            assert(typeof row.event_json === "string");
-            return JSON.parse(row.event_json).id;
-          }),
-        ).toEqual([scope.sessionId, "first", "second"]);
-      } finally {
-        reopened.close();
-      }
-    } finally {
-      vi.useRealTimers();
-      release.resolve();
-      await Promise.allSettled([writing, closing, ...accepted]);
-      await fixture.cleanup();
-    }
-  },
-);
-
-it.each(["live", "revoked", "foreign"] as const)(
-  "retains logical mirror writer binding (%s)",
-  async (mode) => {
-    await withOpenClawTestState({ scenario: "minimal" }, async ({ env }) => {
-      const physical = await seed(env);
-      const scope = {
-        ...physical,
-        storePath: resolveSessionStorePathCore(undefined, { agentId: physical.agentId, env }),
-      };
-      expect(scope.storePath).not.toBe(physical.storePath);
-      const target =
-        mode === "foreign"
-          ? { ...scope, sessionId: "foreign-mirror", sessionKey: "agent:main:foreign-mirror" }
-          : scope;
-      if (mode === "foreign") {
-        await replaceSessionEntry(target, { sessionId: target.sessionId, updatedAt: 1 });
-      }
-      let current = true;
-      const guard = composeSessionTranscriptWriteAssertion([], () => {
-        if (!current) {
-          throw new Error("Logical mirror writer revoked");
-        }
-      });
-      const operation = withSessionTranscriptWriteAssertion(scope, guard, () => {
-        if (mode === "revoked") {
-          current = false;
-        }
-        return appendAssistantMirrorMessageByIdentity({
-          ...target,
-          text: "Owned terminal fallback",
-          idempotencyKey: "logical-owned-mirror",
-        });
-      });
-      if (mode === "live") {
-        await expect(operation).resolves.toMatchObject({ ok: true });
-      } else if (mode === "revoked") {
-        await expect(operation).rejects.toThrow("Logical mirror writer revoked");
-      } else {
-        await expect(operation).rejects.toBeInstanceOf(SessionTranscriptWriterClaimReboundError);
-      }
-      expect(messageIds(physical)).toHaveLength(mode === "live" ? 1 : 0);
-      if (mode === "foreign") {
-        expect(messageIds(target)).toEqual([]);
-      }
-    });
-  },
-);
-
-it("cannot retarget owned authority by mutating a logical selector after dispatch", async () => {
-  await withOpenClawTestState({ scenario: "minimal" }, async (state) => {
-    const physical = await seed(state.env);
-    const requested = {
-      ...physical,
-      storePath: resolveSessionStorePathCore(undefined, {
-        agentId: physical.agentId,
-        env: state.env,
-      }),
-    };
-    const owner = {
-      ...physical,
-      storePath: state.statePath("other-owner", "openclaw-agent.sqlite"),
-    };
-    await replaceSessionEntry(owner, { sessionId: owner.sessionId, updatedAt: 1 });
-    await expect(
-      withSessionTranscriptWriteAssertion(owner, composeSessionTranscriptWriteAssertion([]), () => {
-        const pending = withTranscriptWriteLock(requested, (locked) =>
-          locked.appendMessage({
-            message: { role: "assistant", content: "must not cross stores" },
-          }),
-        );
-        requested.storePath = owner.storePath;
-        return pending;
-      }),
-    ).rejects.toBeInstanceOf(SessionTranscriptWriterClaimReboundError);
-    expect(messageIds(physical)).toEqual([]);
-    expect(messageIds(owner)).toEqual([]);
   });
 });

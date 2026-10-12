@@ -103,16 +103,6 @@ describe("plugin-sdk provider-auth-runtime", () => {
       agentDir,
     );
 
-    expect(
-      providerAuthRuntime.resolveProviderAuthProfileMetadata({
-        provider: "openai",
-        profileId: "openai:chatgpt",
-        agentDir,
-      }),
-    ).toEqual({
-      profileId: "openai:chatgpt",
-      accountId: "acct-openai-workspace",
-    });
     const params = { provider: "openai", profileId: "openai:chatgpt", agentDir };
     await expect(
       providerAuthRuntime.resolveProviderAuthProfileMetadataAsync(params),

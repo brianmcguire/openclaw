@@ -123,13 +123,7 @@ export {
 
 // Intentional public runtime surface: channel plugins use ingress agent helpers directly.
 export { agentCommandFromIngress } from "../agents/agent-command.js";
-export {
-  getTtsProvider,
-  getTtsProviderAsync,
-  resolveTtsConfig,
-  resolveTtsPrefsPath,
-  resolveTtsPrefsPathAsync,
-} from "../tts/tts.js";
+export { getTtsProviderAsync, resolveTtsConfig, resolveTtsPrefsPathAsync } from "../tts/tts.js";
 export type { ResolvedTtsConfig } from "../tts/tts.js";
 
 export {

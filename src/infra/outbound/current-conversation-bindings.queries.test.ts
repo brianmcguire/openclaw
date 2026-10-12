@@ -9,7 +9,7 @@ import {
 import { withOpenClawTestState } from "../../test-utils/openclaw-test-state.js";
 import { INTERNAL_MESSAGE_CHANNEL } from "../../utils/message-channel-constants.js";
 import { executeSqliteQuerySync, getNodeSqliteKysely } from "../kysely-sync.js";
-import { createAccountScopedConversationBindingManager } from "./account-scoped-conversation-bindings.js";
+import { createAccountScopedConversationBindingManagerV2 } from "./account-scoped-conversation-bindings.js";
 import {
   bindCurrentConversationRecordAsync,
   deleteCurrentConversationBindingRecordsBySession,
@@ -406,7 +406,7 @@ it("inspects mixed owner batches once without replacing exact rows by legacy fal
     seed(malformed, "malformed");
     seed({ ...expired, expiresAt: 1 });
     seed(expired, "expired");
-    const manager = createAccountScopedConversationBindingManager({
+    const manager = createAccountScopedConversationBindingManagerV2({
       channel: "fixture",
       accountId: "owner",
       cfg: {},

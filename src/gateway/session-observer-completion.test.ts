@@ -100,7 +100,7 @@ describe("session observer completion", () => {
         }),
     );
     const harness = createHarness({ completeModel });
-    startAndAddToolNotes(harness.observer);
+    await startAndAddToolNotes(harness.observer);
 
     await vi.advanceTimersByTimeAsync(12_000);
     expect(completeModel).toHaveBeenCalledOnce();
@@ -114,7 +114,7 @@ describe("session observer completion", () => {
       expect.any(Set),
       expect.anything(),
     );
-    harness.observer.dispose();
+    await harness.observer.disposeAsync();
   });
 
   it("aborts stuck completions at the cap and disables the run after two failures", async () => {
@@ -129,7 +129,7 @@ describe("session observer completion", () => {
         }),
     );
     const harness = createHarness({ completeModel });
-    startAndAddToolNotes(harness.observer);
+    await startAndAddToolNotes(harness.observer);
     await vi.advanceTimersByTimeAsync(12_000);
     await vi.advanceTimersByTimeAsync(29_999);
     expect(signals[0]?.aborted).toBe(false);
@@ -141,6 +141,6 @@ describe("session observer completion", () => {
     await vi.advanceTimersByTimeAsync(60_000);
     expect(completeModel).toHaveBeenCalledTimes(2);
     expect(harness.broadcastToConnIds).not.toHaveBeenCalled();
-    harness.observer.dispose();
+    await harness.observer.disposeAsync();
   });
 });

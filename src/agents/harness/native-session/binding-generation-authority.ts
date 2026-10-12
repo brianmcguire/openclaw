@@ -1,5 +1,4 @@
 import { resolveSessionStorePathCore } from "../../../config/sessions/paths.js";
-import { warnPluginSdkDeprecation } from "../../../plugins/sdk-deprecation.js";
 import {
   createNativeSessionBindingAuthority,
   combineNativeSessionBindingAuthority,
@@ -11,31 +10,6 @@ import type {
   NativeSessionGenerationReclaimPlan,
   NativeSessionGenerationAdoptionResult,
 } from "./binding-generation.js";
-
-/**
- * @deprecated Use resolveNativeSessionBindingWithAuthorityV2; removed in the next Plugin SDK major.
- */
-export async function resolveNativeSessionBindingWithAuthority<TBinding>(
-  params: NativeSessionBindingResolveOptions<TBinding> & {
-    readBinding: (sessionId?: string) => TBinding | undefined;
-  },
-) {
-  warnPluginSdkDeprecation({
-    family: "native-session-binding",
-    method: "resolveNativeSessionBindingWithAuthority",
-    replacement: "resolveNativeSessionBindingWithAuthorityV2",
-    compatibility: "The legacy binding callback retains its synchronous authority frame.",
-  });
-  return resolveNativeSessionBindingOwner(params, (authority, previousSessionId) =>
-    authority.withCurrent(() => {
-      const current = params.readBinding();
-      params.assertBinding?.(
-        current ?? (previousSessionId ? params.readBinding(previousSessionId) : undefined),
-      );
-      return current;
-    }),
-  );
-}
 
 /** Prepare plugin-owned binding reads before admitting the exact host lineage. */
 export async function resolveNativeSessionBindingWithAuthorityV2<TBinding>(

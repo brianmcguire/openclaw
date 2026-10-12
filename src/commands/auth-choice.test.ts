@@ -184,7 +184,7 @@ vi.mock("../agents/auth-profiles.js", () => ({
     }
     return { rollback() {} };
   },
-  upsertAuthProfile: (params: {
+  upsertAuthProfileAsync: async (params: {
     profileId: string;
     credential: StoredAuthProfile;
     agentDir?: string;

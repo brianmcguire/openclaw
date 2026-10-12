@@ -21,14 +21,10 @@ export type PluginHookReplyDispatchEvent = {
   originatingAccountId?: string;
   originatingThreadId?: string | number;
   originatingChatType?: ChatType;
-  /** @deprecated Await shouldSendToolSummariesAsync; retained until the next Plugin SDK major. */
-  shouldSendToolSummaries: boolean;
-  /** @deprecated Await shouldSendFullToolDetailsAsync; retained until the next Plugin SDK major. */
-  shouldSendFullToolDetails: boolean;
   /** Fresh worker-backed visibility; supplied by current hosts. */
-  shouldSendToolSummariesAsync?: () => Promise<boolean>;
+  shouldSendToolSummariesAsync: () => Promise<boolean>;
   /** Fresh worker-backed detail visibility; supplied by current hosts. */
-  shouldSendFullToolDetailsAsync?: () => Promise<boolean>;
+  shouldSendFullToolDetailsAsync: () => Promise<boolean>;
   sendPolicy: "allow" | "deny";
   isTailDispatch?: boolean;
 };

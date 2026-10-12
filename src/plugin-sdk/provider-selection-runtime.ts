@@ -163,59 +163,6 @@ function providerConfigContext<TFullConfig, TProvider extends AutoSelectableProv
   };
 }
 
-/** @deprecated Use resolveConfiguredCapabilityProviderAsync when providers resolve stored credentials. */
-export function resolveConfiguredCapabilityProvider<
-  TConfig,
-  TFullConfig,
-  TProvider extends AutoSelectableProvider,
->(
-  params: CapabilityProviderSelectionParams<TFullConfig, TProvider> & {
-    resolveProviderConfig: (params: ProviderConfigContext<TProvider, TFullConfig>) => TConfig;
-    isProviderConfigured: (
-      params: ProviderConfiguredContext<TProvider, TFullConfig, TConfig>,
-    ) => boolean;
-  },
-): ResolvedConfiguredProvider<TProvider, TConfig> {
-  const { configuredProviderId, providers } = prepareProviderCandidates(params);
-  if (providers.length === 0) {
-    return {
-      ok: false,
-      code: configuredProviderId ? "missing-configured-provider" : "no-registered-provider",
-      ...(configuredProviderId ? { configuredProviderId } : {}),
-    };
-  }
-
-  let firstUnavailable: TProvider | undefined;
-  let firstUnconfigured: TProvider | undefined;
-  for (const provider of providers) {
-    if (
-      !configuredProviderId &&
-      params.isProviderAvailable &&
-      !params.isProviderAvailable({ provider })
-    ) {
-      firstUnavailable ??= provider;
-      continue;
-    }
-    const providerConfig = params.resolveProviderConfig(
-      providerConfigContext(params, provider, configuredProviderId),
-    );
-    if (params.isProviderConfigured({ provider, cfg: params.cfg, providerConfig })) {
-      return { ok: true, configuredProviderId, provider, providerConfig };
-    }
-    if (configuredProviderId) {
-      return { ok: false, code: "provider-not-configured", configuredProviderId, provider };
-    }
-    firstUnconfigured ??= provider;
-  }
-
-  return {
-    ok: false,
-    code:
-      !firstUnconfigured && firstUnavailable ? "provider-unavailable" : "provider-not-configured",
-    provider: firstUnconfigured ?? firstUnavailable,
-  };
-}
-
 /** Async configuration and availability preserve provider selection order. */
 export async function resolveConfiguredCapabilityProviderAsync<
   TConfig,

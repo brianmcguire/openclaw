@@ -262,7 +262,7 @@ describe("cloud worker milestone 2 fault injection", () => {
           await expect.soft(command).resolves.toBeUndefined();
         }
         const settled: unknown = JSON.parse(stdout || "null");
-        const transcript = SessionManager.open(harness.sessionTarget);
+        const transcript = await SessionManager.openAsync(harness.sessionTarget);
         const messages = transcript
           .getEntries()
           .flatMap((entry) => (entry.type === "message" ? [entry.message] : []));
@@ -403,7 +403,9 @@ describe("cloud worker milestone 2 fault injection", () => {
         previewGate.release.resolve();
         await waitForWorkerEvent(finishingGate.entered.promise, result, "finishing event");
         expect(settled).toBe(false);
-        expect(SessionManager.open(harness.sessionTarget).getEntries()).toHaveLength(2);
+        expect((await SessionManager.openAsync(harness.sessionTarget)).getEntries()).toHaveLength(
+          2,
+        );
         expect(harness.placementStore.get(SESSION_ID)?.lastLiveEventAckCursor).toBeGreaterThan(0);
         expect(await harness.placementStore.listPendingWorkspaceResultsAsync()).toMatchObject([
           { sessionId: SESSION_ID, environmentId: ENVIRONMENT_ID, runId: RUN_ID },
@@ -483,11 +485,13 @@ describe("cloud worker milestone 2 fault injection", () => {
         .requestParams("worker.live-event")
         .map((request) => (request as WorkerLiveEventParams).seq),
     ).toEqual([1, 2, 3, 4, 1, 2, 3, 4]);
-    const transcript = SessionManager.open(harness.sessionTarget).getEntries();
+    const transcript = (await SessionManager.openAsync(harness.sessionTarget)).getEntries();
     expect(transcript).toHaveLength(2);
     expect(transcript[0]).toMatchObject({ message: transcriptMessage("partitioned user") });
     expect(new Set(transcript.map((entry) => entry.id)).size).toBe(2);
-    expect(SessionManager.open(harness.sessionTarget).getLeafId()).toBe(committed.newLeafId);
+    expect((await SessionManager.openAsync(harness.sessionTarget)).getLeafId()).toBe(
+      committed.newLeafId,
+    );
   });
 
   it("fences restart-inherited authority and recovers durable state on a fresh claim", async () => {
@@ -557,7 +561,7 @@ describe("cloud worker milestone 2 fault injection", () => {
         owner: { kind: "worker", environmentId: ENVIRONMENT_ID, ownerEpoch: harness.epoch },
       },
     });
-    expect(SessionManager.open(harness.sessionTarget).getEntries()).toHaveLength(1);
+    expect((await SessionManager.openAsync(harness.sessionTarget)).getEntries()).toHaveLength(1);
 
     const recoveryRunId = "restart-recovery-run";
     const oldEpoch = harness.epoch;
@@ -642,7 +646,7 @@ describe("cloud worker milestone 2 fault injection", () => {
     ).resolves.toEqual(doneOutcome("new owner reply"));
     await fresh.transcript.commit([transcriptMessage("new owner")]);
 
-    const messages = SessionManager.open(harness.sessionTarget)
+    const messages = (await SessionManager.openAsync(harness.sessionTarget))
       .getEntries()
       .flatMap((entry) => (entry.type === "message" ? [entry.message] : []));
     expect(messages.map((message) => message.role)).toEqual(["user", "user"]);
@@ -669,8 +673,8 @@ describe("cloud worker milestone 2 fault injection", () => {
     const commit = current.transcript.commit([transcriptMessage("stale paid output")]);
     await entered.promise;
     harness.partition();
-    const local = SessionManager.open(harness.sessionTarget);
-    local.appendMessage(transcriptMessage("competing local entry"));
+    const local = await SessionManager.openAsync(harness.sessionTarget);
+    await local.appendMessageAsync(transcriptMessage("competing local entry"));
     release.resolve();
 
     await expect(commit).rejects.toMatchObject({
@@ -684,7 +688,7 @@ describe("cloud worker milestone 2 fault injection", () => {
     ).rejects.toMatchObject({ name: "WorkerTranscriptCommitError" });
     expect(current.transcript.nextSeq).toBe(2);
     expect(harness.requestParams("worker.transcript.commit")).toHaveLength(2);
-    expect(SessionManager.open(harness.sessionTarget).getEntries()).toHaveLength(1);
+    expect((await SessionManager.openAsync(harness.sessionTarget)).getEntries()).toHaveLength(1);
   });
 
   it("advances a worker live stream whose run context is dispatch-owned and visible", async () => {

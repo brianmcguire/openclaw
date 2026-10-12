@@ -67,14 +67,8 @@ import {
 } from "../../config/group-policy.js";
 import { resolveMarkdownTableMode } from "../../config/markdown-tables.js";
 import { resolveSessionStorePathCore } from "../../config/sessions.js";
-import {
-  resolveSessionEntryResetFreshness,
-  resolveSessionEntryResetFreshnessAsync,
-} from "../../config/sessions/entry-freshness.js";
-import {
-  readSessionUpdatedAtCore,
-  recordInboundSessionMeta,
-} from "../../config/sessions/session-accessor.js";
+import { resolveSessionEntryResetFreshnessAsync } from "../../config/sessions/entry-freshness.js";
+import { recordInboundSessionMeta } from "../../config/sessions/session-accessor.js";
 import { readSessionUpdatedAtInWorker } from "../../config/sessions/session-entry-read-runtime.js";
 import { getChannelActivity, recordChannelActivity } from "../../infra/channel-activity.js";
 import { readRemoteMediaBuffer, saveRemoteMedia, saveResponseMedia } from "../../media/fetch.js";
@@ -160,7 +154,6 @@ export function createRuntimeChannel(options?: {
   } satisfies PluginRuntime["channel"]["inbound"];
   const sessionRuntime = {
     resolveStorePath: resolveSessionStorePathCore,
-    readSessionUpdatedAt: readSessionUpdatedAtCore,
     readSessionUpdatedAtAsync: readSessionUpdatedAtInWorker,
     // Plugin runtime property names are a shipped contract; the implementations
     // route through the session accessor boundary.
@@ -168,7 +161,6 @@ export function createRuntimeChannel(options?: {
     recordInboundSession,
     updateLastRoute,
     updateLastRouteWithAuthority,
-    resolveEntryResetFreshness: resolveSessionEntryResetFreshness,
     resolveEntryResetFreshnessAsync: resolveSessionEntryResetFreshnessAsync,
   };
   const channelRuntime = {

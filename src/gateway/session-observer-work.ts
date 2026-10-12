@@ -21,7 +21,6 @@ export type SessionObserverEventSteps = Generator<
 /** The observer's accepted work settles independently of scheduler cancellation. */
 export function createSessionObserverWork(params: {
   deps: SessionObserverDeps;
-  readSession: NonNullable<SessionObserverDeps["readSession"]>;
   companionReader: ReturnType<typeof createSessionObserverCompanionSnapshotReader>;
   handleEventSteps: (
     event: SessionObserverEvent,
@@ -35,7 +34,6 @@ export function createSessionObserverWork(params: {
 }) {
   let disposed = false;
   let closing = false;
-  let nativeEvent = false;
   const acceptedWork = new AsyncWorkScope();
   let eventTail = Promise.resolve();
   const pending = new Set<{ scopeKey: string; current: boolean }>();
@@ -75,29 +73,6 @@ export function createSessionObserverWork(params: {
     eventTail = result.then(clearPending, clearPending);
     return result;
   };
-  function handleEvent(event: SessionObserverEvent, settledError = false) {
-    if (closing) {
-      return;
-    }
-    const reader =
-      event.sessionKey && event.agentId
-        ? captureSessionObserverRead(params.deps, event.sessionKey, event.agentId)
-        : undefined;
-    const steps = params.handleEventSteps(event, settledError, reader);
-    nativeEvent = true;
-    try {
-      let next = steps.next();
-      while (!next.done) {
-        if ("work" in next.value) {
-          throw new Error("Synchronous observer event unexpectedly yielded");
-        }
-        next = steps.next(params.readSession(next.value.sessionKey, next.value.agentId));
-      }
-    } finally {
-      nativeEvent = false;
-    }
-  }
-
   async function handleEventAsync(
     event: SessionObserverEvent,
     settledError = false,
@@ -171,29 +146,19 @@ export function createSessionObserverWork(params: {
     },
     resetting,
     background,
-    handleEvent,
     handleEventAsync,
     disposeAsync,
-    dispose: () => {
-      if (disposed) {
-        return;
-      }
-      disposed = true;
-      void disposeAsync().catch(reportError);
-      params.finishClose();
-    },
     async withCurrent<T>(
       reader: SessionObserverRead | undefined,
       sessionKey: string,
       agentId: string,
       consume: (session: SessionEntry | undefined) => T,
     ) {
-      return reader
-        ? reader.withRead((session) => {
-            reader.assertCurrent();
-            return consume(session);
-          })
-        : consume(params.readSession(sessionKey, agentId));
+      const source = reader ?? captureSessionObserverRead(params.deps, sessionKey, agentId);
+      return source.withRead((session) => {
+        source.assertCurrent();
+        return consume(session);
+      });
     },
     refreshAfterReset(
       sessionKey: string,
@@ -236,12 +201,9 @@ export function createSessionObserverWork(params: {
           publish();
         }
       };
-      if (nativeEvent || !state.reader) {
-        state.reader?.assertCurrent();
-        consume(params.readSession(state.sessionKey, state.agentId));
-        return undefined;
-      }
-      return acceptedWork.track(() => state.reader!.withRead(consume)).catch(reportError);
+      const reader =
+        state.reader ?? captureSessionObserverRead(params.deps, state.sessionKey, state.agentId);
+      return acceptedWork.track(() => reader.withRead(consume)).catch(reportError);
     },
     async getCompanionSnapshotAsync(this: void, sessionKey: string, selectedAgentId?: string) {
       if (closing) {

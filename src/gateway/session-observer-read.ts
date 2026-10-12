@@ -97,7 +97,7 @@ export function captureSessionObserverRead(
         return deps.persistDigest(params);
       }
       if (!target) {
-        // Legacy event admission is synchronous; its asynchronous write still prepares the source.
+        // Context-reduced terminal events may need to prepare their source before writing.
         await reader.withRead(() => undefined);
         assertCurrent();
       }

@@ -489,7 +489,7 @@ describe("Browser Talk consult input custody", () => {
         "held model implementation",
       );
       let modelReply = consultAnswer;
-      let modelMessages: Parameters<SessionManager["appendMessage"]>[0][] = [
+      let modelMessages: Parameters<SessionManager["appendMessageAsync"]>[0][] = [
         Object.assign(
           makeAgentAssistantMessage({
             content: [{ type: "text", text: consultCommentary }],
@@ -526,14 +526,14 @@ describe("Browser Talk consult input custody", () => {
         params.onExecutionPhase?.({ phase: "model_call_started" });
         const result = await completeModel(params);
         params.abortSignal?.throwIfAborted();
-        const manager = guardSessionManager(SessionManager.open(scope()), {
+        const manager = guardSessionManager(await SessionManager.openAsync(scope()), {
           agentId: params.agentId,
           sessionKey: params.sessionKey,
           runId: params.runId,
           prepareAssistantTranscriptMessage: params.prepareAssistantTranscriptMessage,
         });
         for (const message of modelMessages) {
-          manager.appendMessage(message);
+          await manager.appendMessageAsync(message);
         }
         return { ...result, payloads: [{ text: modelReply }] };
       });
@@ -632,8 +632,8 @@ describe("Browser Talk consult input custody", () => {
       clearSessionStoreCacheForTest();
       expectVisibleSpeechOnly(await historyMessages(), "reopened chat.history", true);
       for (const manager of [
-        SessionManager.open(scope()),
-        SessionManager.openModelContext(scope()),
+        await SessionManager.openAsync(scope()),
+        await SessionManager.openModelContextAsync(scope()),
       ]) {
         const messages = manager.buildSessionContext().messages;
         expectNoGeneratedInput(messages, "reopened model context");
@@ -702,13 +702,13 @@ describe("Direct Talk consult history after call closure", () => {
         expect(recorder.hasPersisted()).toBe(true);
         const result = await completeModel(params);
         params.abortSignal?.throwIfAborted();
-        const manager = guardSessionManager(SessionManager.open(scope()), {
+        const manager = guardSessionManager(await SessionManager.openAsync(scope()), {
           agentId: params.agentId,
           sessionKey: params.sessionKey,
           runId: params.runId,
           prepareAssistantTranscriptMessage: params.prepareAssistantTranscriptMessage,
         });
-        manager.appendMessage(
+        await manager.appendMessageAsync(
           makeAgentAssistantMessage({ content: [{ type: "text", text: directAnswer }] }),
         );
         finalCommitted.resolve();
@@ -785,8 +785,9 @@ describe("Direct Talk consult history after call closure", () => {
             .toEqual([directAnswer]);
           expectNoGeneratedInput(messages, `closed direct call ${view}`);
         }
-        const modelContext =
-          SessionManager.openModelContext(scope()).buildSessionContext().messages;
+        const modelContext = (
+          await SessionManager.openModelContextAsync(scope())
+        ).buildSessionContext().messages;
         expectNoGeneratedInput(modelContext, "closed direct call model context");
         expect(modelContext.map(extractText)).toContain(directAnswer);
       } finally {

@@ -11,6 +11,7 @@ import {
 } from "../agents/session-activity-notes.js";
 import { resolveUtilityModelRefForAgent } from "../agents/utility-model.js";
 import { resolveSessionStorePathCore } from "../config/sessions/paths.js";
+import type { SessionEntry } from "../config/sessions/types.js";
 import { getAgentRunContext } from "../infra/agent-run-registry.js";
 import { formatErrorMessage } from "../infra/errors.js";
 import { createSubsystemLogger } from "../logging/subsystem.js";
@@ -28,7 +29,6 @@ import {
   defaultCompleteModel,
   defaultPersistDigest,
   defaultPrepareModel,
-  defaultReadSession,
   isSameSessionObserverLifecycle,
   markSessionObserverRunSuperseded,
   rememberSessionObserverDisabledRun,
@@ -73,9 +73,6 @@ export function createSessionObserver(deps: SessionObserverDeps): SessionObserve
   const completeModel = deps.completeModel ?? defaultCompleteModel;
   const resolveStorePath = (agentId: string) =>
     resolveSessionStorePathCore(deps.getConfig().session?.store, { agentId });
-  const readSession: NonNullable<SessionObserverDeps["readSession"]> =
-    deps.readSession ??
-    ((sessionKey, agentId) => defaultReadSession(sessionKey, agentId, resolveStorePath(agentId)));
   const persistDigest: NonNullable<SessionObserverDeps["persistDigest"]> = (params) =>
     params.reader
       ? params.reader.persist(params)
@@ -94,7 +91,6 @@ export function createSessionObserver(deps: SessionObserverDeps): SessionObserve
   };
   const lifecycle = createSessionObserverLifecycle({
     getConfig: deps.getConfig,
-    readSession,
     refreshAfterReset: (sessionKey, agentId, consume) =>
       work.refreshAfterReset(sessionKey, agentId, consume),
     now,
@@ -111,13 +107,11 @@ export function createSessionObserver(deps: SessionObserverDeps): SessionObserve
   const { states, dormantRuns, revisionFloors, supersededRuns, disabledRuns } = lifecycle;
   const companionReader = createSessionObserverCompanionSnapshotReader({
     getConfig: deps.getConfig,
-    readSession,
     states,
     retireObsolete: lifecycle.retireObsolete,
   });
   const work = createSessionObserverWork({
     deps,
-    readSession,
     companionReader,
     handleEventSteps,
     canPublish: (state, session) =>
@@ -195,7 +189,7 @@ export function createSessionObserver(deps: SessionObserverDeps): SessionObserve
 
   const synthesizeTerminalDigest = createSessionObserverTerminalPublisher({
     dormantRuns,
-    readSession,
+    deps,
     persistDigest,
     now,
     work,
@@ -353,7 +347,7 @@ export function createSessionObserver(deps: SessionObserverDeps): SessionObserve
       !modelStateIsCurrent(state) ||
       !modelSlots.requestIsCurrent(state, requestGeneration) ||
       (!final && state.terminalHealth !== undefined);
-    const acceptDigestPublication = (session: ReturnType<typeof readSession>) => {
+    const acceptDigestPublication = (session: SessionEntry | undefined) => {
       if (digestIsStale()) {
         retireSelectedNotes();
         if (final && lifecycle.isTracked(state)) {
@@ -472,11 +466,7 @@ export function createSessionObserver(deps: SessionObserverDeps): SessionObserve
     if (lifecyclePhase === "error" && !terminal) {
       clearPendingTerminalError(event.runId);
       const timer = setTimeoutFn(() => {
-        if (reader) {
-          work.background(() => work.handleEventAsync(event, true, reader));
-        } else {
-          work.handleEvent(event, true);
-        }
+        work.background(() => work.handleEventAsync(event, true, reader));
       }, AGENT_RUN_TERMINAL_RETRY_GRACE_MS);
       pendingTerminalErrors.set(event.runId, timer);
       return;
@@ -552,7 +542,7 @@ export function createSessionObserver(deps: SessionObserverDeps): SessionObserve
     }
     const isRunStart = event.stream === "lifecycle" && event.data.phase === "start";
     let state = states.get(scopeKey);
-    let session: ReturnType<typeof readSession> = undefined;
+    let session: SessionEntry | undefined;
     let admittedModelRef: string | undefined;
     let canAdmit = false;
     if (!state || state.runId !== event.runId) {
@@ -707,7 +697,6 @@ export function createSessionObserver(deps: SessionObserverDeps): SessionObserve
   }
 
   return {
-    handleEvent: work.handleEvent,
     handleEventAsync: work.handleEventAsync,
     setConnectionVisibility(connId, visible) {
       if (visible) {
@@ -722,9 +711,7 @@ export function createSessionObserver(deps: SessionObserverDeps): SessionObserve
         audienceLifecycle.reconcileAll();
       }
     },
-    getCompanionSnapshot: companionReader.readSync,
     getCompanionSnapshotAsync: work.getCompanionSnapshotAsync,
-    dispose: work.dispose,
     disposeAsync: work.disposeAsync,
   };
 }

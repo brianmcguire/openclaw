@@ -21,7 +21,6 @@ import {
 import * as admission from "../../infra/sqlite-worker-operation-admission.js";
 import { sqliteWorkerOwnerProbe as probe } from "../../infra/sqlite-worker-owner-probe.test-support.js";
 import * as workerStore from "../../infra/sqlite-worker-store.js";
-import { PluginInstance } from "../../plugins/plugin-instance.js";
 import { readWithdrawnUserTurnInputId } from "../../sessions/user-turn-transcript-admission.js";
 import { completeUserTurnProcessing } from "../../sessions/user-turn-transcript-processing.js";
 import { createUserTurnTranscriptRecorder } from "../../sessions/user-turn-transcript.js";
@@ -56,52 +55,6 @@ const message = (runId: string) => ({
   idempotencyKey: `${runId}:user`,
 });
 
-it("accepts supplied legacy completion callbacks without falling back from async completion", async () => {
-  const outcome = buildAgentRunTerminalOutcome({ status: "ok" });
-  const legacy = vi.fn(() => outcome);
-  const recorder = {
-    ...createUserTurnTranscriptRecorder({
-      message: message("legacy"),
-      target: { ...scope, sessionEntry: { sessionId: scope.sessionId, updatedAt: 1 } },
-    }),
-    completeProcessingAsync: undefined,
-    completeProcessing: legacy,
-  };
-  const warning = vi.spyOn(process, "emitWarning").mockImplementation(() => {});
-  const plugin = new PluginInstance("pending-input-legacy-recorder");
-  try {
-    await plugin.run(async () => {
-      expect(await completeUserTurnProcessing(recorder, outcome)).toEqual(outcome);
-      expect(await completeUserTurnProcessing(recorder, outcome)).toEqual(outcome);
-    });
-    expect(warning).toHaveBeenCalledExactlyOnceWith(
-      expect.stringContaining("completeProcessingAsync"),
-      { code: "DEP_PLUGIN_SDK", type: "DeprecationWarning" },
-    );
-    expect(
-      await completeUserTurnProcessing(
-        { ...recorder, completeProcessingAsync: async () => undefined },
-        outcome,
-      ),
-    ).toBeUndefined();
-    await expect(
-      completeUserTurnProcessing(
-        {
-          ...recorder,
-          completeProcessingAsync: async () => {
-            throw new Error("Async completion failed");
-          },
-        },
-        outcome,
-      ),
-    ).rejects.toThrow("Async completion failed");
-    expect(legacy).toHaveBeenCalledTimes(2);
-  } finally {
-    warning.mockRestore();
-    await plugin.dispose();
-  }
-});
-
 function createFixture() {
   const database = openOpenClawAgentDatabase({ agentId: scope.agentId });
   writeSessionEntry(database, scope.sessionKey, { sessionId: scope.sessionId, updatedAt: 1 });
@@ -123,25 +76,6 @@ function createFixture() {
         .all(),
   };
 }
-
-it("keeps host-created synchronous completion usable through the SDK compatibility window", async () => {
-  await withOpenClawTestState({ scenario: "minimal" }, async () => {
-    const { pending } = createFixture();
-    const recorder = createUserTurnTranscriptRecorder({
-      message: message("host-legacy"),
-      target: { ...scope, sessionEntry: { sessionId: scope.sessionId, updatedAt: 1 } },
-      trackInputCompletion: true,
-    });
-    expect(await recorder.stageApproved!({ runId: "host-legacy", assertCurrent: () => {} })).toBe(
-      true,
-    );
-    const outcome = buildAgentRunTerminalOutcome({ status: "ok" });
-    expect(recorder.completeProcessing!(outcome)).toEqual(outcome);
-    expect(recorder.getProcessingCompletion!()).toEqual(outcome);
-    expect(pending()).toEqual([]);
-    await recorder.waitForPendingInputSettlement!();
-  });
-});
 
 it("shares transaction rows without retaining stale custody and returns the persisted staging postimage", async () => {
   await withOpenClawTestState({ scenario: "minimal" }, async () => {

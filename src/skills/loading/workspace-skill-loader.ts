@@ -555,18 +555,6 @@ export function loadWorkspaceSkills(
   return filterSkillEntries(entries, { ...opts, skillFilter: effectiveSkillFilter });
 }
 
-export function loadVisibleSkills(
-  workspaceDir: string,
-  opts?: Omit<
-    LocalWorkspaceSkillLoadOptions,
-    "bundledSkillName" | "executionWorkspaceDir" | "pluginSkillsDir" | "workspaceOnly"
-  >,
-): SkillEntry[] {
-  const entries = mergeSkillTiers(loadLocalSkillTiers(workspaceDir, opts), opts);
-  const effectiveSkillFilter = resolveEffectiveWorkspaceSkillFilter(opts);
-  return filterSkillEntries(entries, { ...opts, skillFilter: effectiveSkillFilter });
-}
-
 /** Read a single bundle with the same boundary and file limits as local discovery. */
 function readBundledSkillEntries(
   skillName: string,

@@ -11,11 +11,9 @@ import { getPairingAdapter } from "../channels/plugins/pairing.js";
 import type { ChannelPairingAdapter } from "../channels/plugins/pairing.types.js";
 import { createSqliteWorkerOperationAdmission } from "../infra/sqlite-worker-operation-admission.js";
 import { DEFAULT_ACCOUNT_ID } from "../routing/session-key.js";
-import { openOpenClawStateDatabase } from "../state/openclaw-state-db.js";
 import { captureOpenClawStateWorkerContext } from "../state/openclaw-state-worker-context.js";
 import { runOpenClawStateWorkerOperation } from "../state/openclaw-state-worker-store.js";
 import { resolveAllowFromAccountId, safeChannelKey } from "./pairing-store-keys.js";
-import { readChannelAllowEntries } from "./pairing-store-sqlite.js";
 import type { PairingChannel, PairingRequestRecord } from "./pairing-store.types.js";
 import type { PairingMutation, PairingSelector } from "./pairing-store.worker-contract.js";
 
@@ -128,18 +126,6 @@ function mutatePairing(params: PairingOptions, mutation: PairingMutation) {
       }),
     },
   );
-}
-
-/** @deprecated Use readChannelAllowFromStore; retained for the v2026.9.8 SDK until the next Plugin SDK major. */
-export function readChannelAllowFromStoreSync(
-  channel: PairingChannel,
-  env: NodeJS.ProcessEnv = process.env,
-  accountId?: string,
-): string[] {
-  const resolvedAccountId = resolveAllowFromAccountId(accountId);
-  return (
-    readChannelAllowEntries(openOpenClawStateDatabase({ env }).db, channel)[resolvedAccountId] ?? []
-  ).slice();
 }
 
 type AllowFromStoreEntryUpdateParams = PairingOptions & {

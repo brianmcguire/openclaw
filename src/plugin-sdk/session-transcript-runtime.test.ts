@@ -43,12 +43,12 @@ import {
   readSessionTranscriptEvents,
   readVisibleSessionTranscriptMessageEntries,
   resolveSessionTranscriptMemoryHitKeyToSessionKeys,
-  withSessionTranscriptWriteLock,
+  withSessionTranscriptWrite,
   type SessionTranscriptReadParams,
   createSessionCatalogGitHubLinker,
   createSessionCatalogSourceActorProjector,
   readSessionTranscriptCatalogPage,
-  readSessionTranscriptCatalogTitle,
+  readSessionTranscriptCatalogTitleAsync,
 } from "./session-transcript-runtime.js";
 
 describe("session transcript runtime SDK", () => {
@@ -160,7 +160,7 @@ describe("session transcript runtime SDK", () => {
     const stopped = new Error("yield settlement stopped");
     const writerEntered = createDeferredCore();
     const releaseWriter = createDeferredCore();
-    const heldWriter = withSessionTranscriptWriteLock(scope, async () => {
+    const heldWriter = withSessionTranscriptWrite(scope, async () => {
       writerEntered.resolve();
       await releaseWriter.promise;
     });
@@ -231,7 +231,7 @@ describe("session transcript runtime SDK", () => {
     });
     let enteredWrites = 0;
     const appendIfMissing = async () =>
-      await withSessionTranscriptWriteLock(scope, async (locked) => {
+      await withSessionTranscriptWrite(scope, async (locked) => {
         const label = ++enteredWrites === 1 ? "first" : "second";
         steps.push(`${label}:read`);
         const events = await locked.readEvents();
@@ -409,9 +409,11 @@ describe("native transcript catalog SDK", () => {
       if (!entry) {
         throw new Error("missing fixture entry");
       }
-      expect(readSessionTranscriptCatalogTitle({ ...scope, entry })).toBe("A useful session title");
+      expect(await readSessionTranscriptCatalogTitleAsync({ ...scope, entry })).toBe(
+        "A useful session title",
+      );
       expect(
-        readSessionTranscriptCatalogTitle({
+        await readSessionTranscriptCatalogTitleAsync({
           ...scope,
           entry: { ...entry, label: "Named", displayName: "Display" },
         }),

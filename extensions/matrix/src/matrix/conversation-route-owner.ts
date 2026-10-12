@@ -1,7 +1,10 @@
 import { normalizeAccountId } from "openclaw/plugin-sdk/account-id";
 import type { OpenClawConfig } from "openclaw/plugin-sdk/config-contracts";
 import type { ConversationBindingInspection } from "openclaw/plugin-sdk/conversation-binding-inspection-runtime";
-import type { ChannelMessagingAdapter } from "openclaw/plugin-sdk/core";
+import type {
+  ChannelConversationRouteOwnerResolver,
+  ChannelMessagingAdapter,
+} from "openclaw/plugin-sdk/core";
 import { resolveAgentRoute } from "openclaw/plugin-sdk/routing";
 import { findMatrixAccountEntry, hasImplicitMatrixAccountConfig } from "../account-selection.js";
 import { projectMatrixInboundRoute, resolveMatrixBindingRef } from "./monitor/route.js";
@@ -62,9 +65,7 @@ function prepareMatrixConversationRouteOwner(params: {
 }
 
 export async function prepareMatrixConversationRouteOwnersAsync(
-  inputs: readonly Parameters<
-    NonNullable<ChannelMessagingAdapter["resolveConversationRouteOwner"]>
-  >[0][],
+  inputs: readonly Parameters<ChannelConversationRouteOwnerResolver>[0][],
   inspectBindings: Parameters<
     NonNullable<ChannelMessagingAdapter["prepareConversationRouteOwnersAsync"]>
   >[1],

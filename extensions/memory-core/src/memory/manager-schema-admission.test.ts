@@ -1,11 +1,11 @@
 import assert from "node:assert/strict";
 import fs from "node:fs/promises";
 import path from "node:path";
+import { resolveOpenClawAgentSqlitePath } from "openclaw/plugin-sdk/sqlite-runtime";
 import {
+  observeHostDataSql,
   openOpenClawAgentDatabase,
-  resolveOpenClawAgentSqlitePath,
-} from "openclaw/plugin-sdk/sqlite-runtime";
-import { observeHostDataSql } from "openclaw/plugin-sdk/sqlite-runtime-testing";
+} from "openclaw/plugin-sdk/sqlite-runtime-testing";
 import { describe, expect, it } from "vitest";
 import { runInMemoryTestBackgroundContext } from "./background-context.test-support.js";
 import { createManagerIndexFixture } from "./manager-index.test-support.js";

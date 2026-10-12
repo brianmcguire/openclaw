@@ -11,7 +11,6 @@ export {
   mergeNativeCommandSpecs,
   parseCommandArgs,
   resolveCommandArgChoices,
-  resolveCommandArgMenu,
   resolveCommandArgMenuAsync,
   serializeCommandArgs,
 } from "../auto-reply/commands-registry.js";

@@ -6,10 +6,8 @@ import type { OpenClawConfig } from "openclaw/plugin-sdk/memory-core-host-engine
 import { encodeMemoryEmbedding } from "openclaw/plugin-sdk/memory-core-host-engine-storage";
 import { deleteSessionEntry } from "openclaw/plugin-sdk/session-store-runtime";
 import { appendSessionTranscriptMessageByIdentity } from "openclaw/plugin-sdk/session-transcript-runtime";
-import {
-  openOpenClawAgentDatabase,
-  resolveOpenClawAgentSqlitePath,
-} from "openclaw/plugin-sdk/sqlite-runtime";
+import { resolveOpenClawAgentSqlitePath } from "openclaw/plugin-sdk/sqlite-runtime";
+import { openOpenClawAgentDatabase } from "openclaw/plugin-sdk/sqlite-runtime-testing";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   DREAMING_MEMORY_BACKUP_NAMESPACE,

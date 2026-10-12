@@ -17,8 +17,8 @@ const replyDispatchEvent = {
   sessionKey: "agent:test:session",
   inboundAudio: false,
   shouldRouteToOriginating: false,
-  shouldSendToolSummaries: true,
-  shouldSendFullToolDetails: false,
+  shouldSendToolSummariesAsync: async () => true,
+  shouldSendFullToolDetailsAsync: async () => false,
   sendPolicy: "allow" as const,
 };
 

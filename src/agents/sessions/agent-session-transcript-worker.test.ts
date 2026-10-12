@@ -1,5 +1,6 @@
 import path from "node:path";
 import { serialize } from "node:v8";
+import { expectDefined } from "@openclaw/normalization-core/expect";
 import { Type } from "typebox";
 import { expect, it, vi } from "vitest";
 import { awaitGateBeforeSettlement } from "../../../test/helpers/promise.js";
@@ -84,8 +85,8 @@ it("commits streamed and custom messages off the host thread and adopts the comm
       storePath: path.join(state.agentDir("main"), "openclaw-agent.sqlite"),
     };
     await upsertSessionEntryCore(target, { sessionId: target.sessionId, updatedAt: 1 });
-    const manager = SessionManager.open(target, state.workspaceDir);
-    manager.appendMessage({ role: "user", content: "current turn", timestamp: 1 });
+    const manager = await SessionManager.openAsync(target, state.workspaceDir);
+    await manager.appendMessageAsync({ role: "user", content: "current turn", timestamp: 1 });
     const committed: string[] = [];
     const guard = installSessionToolResultGuard(manager, {
       onMessagePersisted(message) {
@@ -153,9 +154,12 @@ it("commits streamed and custom messages off the host thread and adopts the comm
       expect(commandBytes).toHaveLength(2);
       expect(Math.max(...commandBytes)).toBeLessThan(2 * Buffer.byteLength(payload) + 4096);
 
-      const concurrent = SessionManager.open(target);
-      const descendantId = concurrent.appendMessage(
-        createAssistant(testModel, [{ type: "text", text: "concurrent reply" }]),
+      const concurrent = await SessionManager.openAsync(target);
+      const descendantId = expectDefined(
+        await concurrent.appendMessageAsync(
+          createAssistant(testModel, [{ type: "text", text: "concurrent reply" }]),
+        ),
+        "Expected appended message",
       );
       await assertWorkerCommit(createAssistant(testModel, [{ type: "text", text: "final reply" }]));
       expect(manager.getLeafEntry()?.parentId).toBe(descendantId);
@@ -223,7 +227,9 @@ it("commits streamed and custom messages off the host thread and adopts the comm
       });
       expect(loadTranscriptEventsSync(target)).toEqual(manager.getPersistedEntries());
 
-      SessionManager.open(target).appendMessage({
+      await (
+        await SessionManager.openAsync(target)
+      ).appendMessageAsync({
         role: "user",
         content: "new turn",
         timestamp: 3,
@@ -254,8 +260,15 @@ it("preserves a newer native view and tool-result state when a worker receipt ar
       storePath: path.join(state.agentDir("main"), "openclaw-agent.sqlite"),
     };
     await upsertSessionEntryCore(target, { sessionId: target.sessionId, updatedAt: 1 });
-    const manager = SessionManager.open(target, state.workspaceDir);
-    const userId = manager.appendMessage({ role: "user", content: "current turn", timestamp: 1 });
+    const manager = await SessionManager.openAsync(target, state.workspaceDir);
+    const userId = expectDefined(
+      await manager.appendMessageAsync({
+        role: "user",
+        content: "current turn",
+        timestamp: 1,
+      }),
+      "Expected appended message",
+    );
     const notifications: string[] = [];
     const guard = installSessionToolResultGuard(manager, {
       onMessagePersisted: (message) => {
@@ -288,30 +301,39 @@ it("preserves a newer native view and tool-result state when a worker receipt ar
         .spyOn(metadataRuntime, "withSessionMetadataWorker")
         .mockImplementation(delayed);
       try {
-        return await manager.appendMessageAsync(message);
+        return expectDefined(
+          await manager.appendMessageAsync(message),
+          "Expected appended message",
+        );
       } finally {
         spy.mockRestore();
       }
     };
     let newerId: string | undefined;
-    const delayedId = await appendDelayed(text("worker reply"), () => {
-      newerId = manager.appendMessage(text("newer native reply"));
+    const delayedId = await appendDelayed(text("worker reply"), async () => {
+      newerId = expectDefined(
+        await manager.appendMessageAsync(text("newer native reply")),
+        "Expected appended message",
+      );
     });
     expect(manager.getLeafId()).toBe(newerId);
     expect(manager.getBranch().map((entry) => entry.id)).toEqual([userId, delayedId, newerId]);
     expect(manager.getPersistedEntries()).toEqual(loadTranscriptEventsSync(target));
 
-    await appendDelayed(call(["finished", "reused", "cleared"]), () => {
-      manager.appendMessage(toolResult("finished"));
-      manager.appendMessage(text("native boundary clears old calls"));
-      manager.appendMessage(call(["reused"]));
-      manager.appendMessage(toolResult("reused"));
-      newerId = manager.appendMessage(call(["reused"], "write"));
+    await appendDelayed(call(["finished", "reused", "cleared"]), async () => {
+      await manager.appendMessageAsync(toolResult("finished"));
+      await manager.appendMessageAsync(text("native boundary clears old calls"));
+      await manager.appendMessageAsync(call(["reused"]));
+      await manager.appendMessageAsync(toolResult("reused"));
+      newerId = expectDefined(
+        await manager.appendMessageAsync(call(["reused"], "write")),
+        "Expected appended message",
+      );
     });
     expect(manager.getLeafId()).toBe(newerId);
     expect(guard.getPendingIds()).toEqual(["reused"]);
     const beforeFlush = manager.getEntries().length;
-    guard.flushPendingToolResults();
+    await guard.flushPendingToolResultsAsync();
     expect(manager.getEntries()).toHaveLength(beforeFlush + 1);
     expect(manager.getLeafEntry()).toMatchObject({
       message: {
@@ -322,7 +344,10 @@ it("preserves a newer native view and tool-result state when a worker receipt ar
       },
     });
     expect(guard.getPendingIds()).toEqual([]);
-    const tailId = await manager.appendMessageAsync(text("normal append after receipt"));
+    const tailId = expectDefined(
+      await manager.appendMessageAsync(text("normal append after receipt")),
+      "Expected appended message",
+    );
     expect(manager.getLeafId()).toBe(tailId);
     expect(manager.getPersistedEntries()).toEqual(loadTranscriptEventsSync(target));
     expect(new Set(manager.getEntries().map((entry) => entry.id)).size).toBe(
@@ -332,14 +357,14 @@ it("preserves a newer native view and tool-result state when a worker receipt ar
       manager.getEntries().filter((entry) => entry.type === "message").length - 1,
     );
 
-    await appendDelayed(call(["omitted"]), () => {
-      manager.appendMessage(text("newer selected view"));
-      manager.branch(userId);
+    await appendDelayed(call(["omitted"]), async () => {
+      await manager.appendMessageAsync(text("newer selected view"));
+      await manager.branchAsync(userId);
     });
     expect(manager.getLeafId()).toBe(userId);
     expect(guard.getPendingIds()).toEqual([]);
     const beforeOmittedFlush = loadTranscriptEventsSync(target);
-    guard.flushPendingToolResults();
+    await guard.flushPendingToolResultsAsync();
     expect(loadTranscriptEventsSync(target)).toEqual(beforeOmittedFlush);
   });
 });

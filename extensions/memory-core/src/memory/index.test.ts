@@ -12,14 +12,12 @@ import {
 } from "openclaw/plugin-sdk/memory-core-host-engine-storage";
 import { resolveSessionTranscriptsDirForAgent } from "openclaw/plugin-sdk/memory-core-host-runtime-core";
 import { deleteSessionEntry } from "openclaw/plugin-sdk/session-store-runtime";
-import {
-  resolveOpenClawAgentSqlitePath,
-  withOpenClawAgentDatabaseWrite,
-} from "openclaw/plugin-sdk/sqlite-runtime";
+import { resolveOpenClawAgentSqlitePath } from "openclaw/plugin-sdk/sqlite-runtime";
 import {
   closeOpenClawAgentDatabasesForTest,
   openOpenClawAgentDatabase,
   useSqliteWorkerFault,
+  withOpenClawAgentDatabaseWrite,
 } from "openclaw/plugin-sdk/sqlite-runtime-testing";
 import { describe, expect, it, vi } from "vitest";
 import { runInMemoryTestBackgroundContext } from "./background-context.test-support.js";

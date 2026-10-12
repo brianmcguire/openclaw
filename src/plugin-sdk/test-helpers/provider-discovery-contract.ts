@@ -142,7 +142,7 @@ function installDiscoveryHooks(options: DiscoveryContractOptions) {
         normalizeOptionalSecretInput: normalizeOptionalString,
         resolveNonEnvSecretRefApiKeyMarker: (source: unknown) =>
           typeof source === "string" ? source : "",
-        upsertAuthProfile: vi.fn(),
+        upsertAuthProfileAsync: vi.fn(async () => {}),
         validateApiKeyInput: () => undefined,
       };
     });

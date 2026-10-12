@@ -20,7 +20,7 @@ import {
   claimHeartbeatOutcomeForRun,
   persistHeartbeatOutcome,
 } from "../../infra/heartbeat-outcome-store.js";
-import { createOpenClawCodingTools } from "../../plugin-sdk/agent-harness.js";
+import { createOpenClawCodingToolsAsync } from "../../plugin-sdk/agent-harness.js";
 import { createPluginRecord } from "../../plugins/loader-records.js";
 import { getActivePluginRegistry } from "../../plugins/runtime.js";
 import {
@@ -942,17 +942,19 @@ describe("runAgentHarnessAttempt", () => {
       receivedPrivateAuthority = "systemAgentTool" in attemptParams;
       await Promise.resolve();
       hostScopeActive = isHostScopedAgentToolActive("openclaw");
-      toolNames = createOpenClawCodingTools({
-        config: { tools: { allow: ["read"], deny: ["openclaw"], toolSearch: true } },
-        runtimeToolAllowlist: ["openclaw"],
-        toolConstructionPlan: {
-          includeBaseCodingTools: false,
-          includeShellTools: false,
-          includeChannelTools: false,
-          includeOpenClawTools: true,
-          includePluginTools: false,
-        },
-      }).map((tool) => tool.name);
+      toolNames = (
+        await createOpenClawCodingToolsAsync({
+          config: { tools: { allow: ["read"], deny: ["openclaw"], toolSearch: true } },
+          runtimeToolAllowlist: ["openclaw"],
+          toolConstructionPlan: {
+            includeBaseCodingTools: false,
+            includeShellTools: false,
+            includeChannelTools: false,
+            includeOpenClawTools: true,
+            includePluginTools: false,
+          },
+        })
+      ).map((tool) => tool.name);
       return createAttemptResult(harnessId);
     });
     registerAgentHarness(
@@ -1283,17 +1285,19 @@ describe("runAgentHarnessAttempt", () => {
     let toolNames: string[] = [];
     agentRunAttempt.mockImplementationOnce(async () => {
       await Promise.resolve();
-      toolNames = createOpenClawCodingTools({
-        config: { tools: { allow: ["read"], deny: ["openclaw"], toolSearch: true } },
-        runtimeToolAllowlist: ["openclaw"],
-        toolConstructionPlan: {
-          includeBaseCodingTools: false,
-          includeShellTools: false,
-          includeChannelTools: false,
-          includeOpenClawTools: true,
-          includePluginTools: false,
-        },
-      }).map((tool) => tool.name);
+      toolNames = (
+        await createOpenClawCodingToolsAsync({
+          config: { tools: { allow: ["read"], deny: ["openclaw"], toolSearch: true } },
+          runtimeToolAllowlist: ["openclaw"],
+          toolConstructionPlan: {
+            includeBaseCodingTools: false,
+            includeShellTools: false,
+            includeChannelTools: false,
+            includeOpenClawTools: true,
+            includePluginTools: false,
+          },
+        })
+      ).map((tool) => tool.name);
       return createAttemptResult("openclaw");
     });
     const params = createAttemptParams(

@@ -7,7 +7,7 @@ import {
   expandExplicitSkillReferences,
   skillCommandsToExplicitSelections,
 } from "../discovery/chat-command-invocation.js";
-import { buildWorkspaceSkillCommandSpecs } from "../discovery/command-specs.js";
+import { assembleWorkspaceSkillCommandSpecs } from "../discovery/command-specs.js";
 import type { Skill } from "../loading/skill-contract.js";
 import { loadWorkspaceSkills } from "../loading/workspace-skill-loader.js";
 import { buildSkillSnapshot } from "../loading/workspace-skill-prompt.js";
@@ -257,14 +257,12 @@ it("delivers the selected host's hidden Skill when both hosts use the same path"
     const hostEntry = loadWorkspaceSkills(f.host, { workspaceOnly: true }).find(
       (entry) => entry.skill.name === "hidden",
     )!;
-    const [command] = buildWorkspaceSkillCommandSpecs(f.gateway, {
-      entries: [
-        {
-          ...hostEntry,
-          skill: recordSkillFileHost({ ...hostEntry.skill, filePath: selectedPath }, "workspace"),
-        },
-      ],
-    });
+    const [command] = assembleWorkspaceSkillCommandSpecs(f.gateway, [
+      {
+        ...hostEntry,
+        skill: recordSkillFileHost({ ...hostEntry.skill, filePath: selectedPath }, "workspace"),
+      },
+    ]);
     const [selected] = skillCommandsToExplicitSelections([command!]);
     expect(selected).toEqual({ name: "hidden", path: selectedPath });
     const expandedReference = expandExplicitSkillReferences({

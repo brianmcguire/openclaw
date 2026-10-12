@@ -4,7 +4,6 @@ import { uniqueStrings } from "@openclaw/normalization-core/string-normalization
 import { resolveDefaultAgentDir } from "../agents/agent-scope-config.js";
 import { buildAuthProfileId } from "../agents/auth-profiles/identity.js";
 import {
-  upsertAuthProfile,
   upsertAuthProfileAsync,
   upsertAuthProfileWithLock,
   upsertAuthProfileWithLockOrThrow,
@@ -26,7 +25,6 @@ import { getProviderEnvVarsCore } from "../secrets/provider-env-vars.js";
 import { isValidSecretRef } from "../secrets/ref-contract.js";
 import { normalizeSecretInput } from "../utils/normalize-secret-input.js";
 import type { SecretInputMode } from "./provider-auth-types.js";
-import { warnPluginSdkDeprecation } from "./sdk-deprecation.js";
 
 const resolveAuthAgentDir = (agentDir?: string, config?: OpenClawConfig) =>
   agentDir ?? resolveDefaultAgentDir(config ?? {});
@@ -108,37 +106,16 @@ export function buildApiKeyCredential(
   };
 }
 
-/** @deprecated Use upsertApiKeyProfileAsync. Removed at the next Plugin SDK major. */
-export function upsertApiKeyProfile(params: {
+type UpsertApiKeyProfileParams = {
   provider: string;
   input: SecretInput;
   agentDir?: string;
   options?: ApiKeyStorageOptions;
   profileId?: string;
   metadata?: Record<string, string>;
-}): string {
-  warnPluginSdkDeprecation({
-    family: "auth-profiles",
-    method: "upsertApiKeyProfile",
-    replacement: "upsertApiKeyProfileAsync",
-  });
-  const profileId = params.profileId ?? buildAuthProfileId({ providerId: params.provider });
-  upsertAuthProfile({
-    profileId,
-    credential: buildApiKeyCredential(
-      params.provider,
-      params.input,
-      params.metadata,
-      params.options,
-    ),
-    agentDir: resolveAuthAgentDir(params.agentDir, params.options?.config),
-  });
-  return profileId;
-}
+};
 
-export async function upsertApiKeyProfileAsync(
-  params: Parameters<typeof upsertApiKeyProfile>[0],
-): Promise<string> {
+export async function upsertApiKeyProfileAsync(params: UpsertApiKeyProfileParams): Promise<string> {
   const profileId = params.profileId ?? buildAuthProfileId({ providerId: params.provider });
   await upsertAuthProfileAsync({
     profileId,

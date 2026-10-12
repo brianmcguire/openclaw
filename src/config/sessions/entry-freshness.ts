@@ -61,8 +61,7 @@ function resolveFreshnessScope(params: ResolveSessionEntryResetFreshnessParams) 
   return { ...params, agentId, storePath };
 }
 
-/** @deprecated Runtime callers should await resolveSessionEntryResetFreshnessAsync. */
-export function resolveSessionEntryResetFreshness(
+export function resolveNativeSessionEntryResetFreshness(
   params: ResolveSessionEntryResetFreshnessParams,
 ): ResolvedSessionEntryResetFreshness {
   const scope = resolveFreshnessScope(params);
@@ -81,7 +80,7 @@ export async function resolveSessionEntryResetFreshnessAsync(
   const scope = resolveFreshnessScope(params);
   // Process-held incognito state retains its existing native owner until its cutover.
   if (isNativeSessionEntryRead(scope, scope.agentId)) {
-    return resolveSessionEntryResetFreshness(scope);
+    return resolveNativeSessionEntryResetFreshness(scope);
   }
   const sessionKey = resolveSqliteSessionKey(scope.sessionKey, scope.agentId);
   return withSessionEntriesFromStoresInWorker(

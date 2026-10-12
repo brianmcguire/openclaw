@@ -1,57 +1,9 @@
 import type {
   NativeSessionBindingLeaseConfig,
   NativeSessionBindingRecord,
-  NativeSessionBindingStateStore,
 } from "./binding-leases.js";
 
 export type TestBindingRecord = NativeSessionBindingRecord & { value?: string };
-
-export function createBindingTestState() {
-  const values = new Map<string, TestBindingRecord>();
-  const state: NativeSessionBindingStateStore<TestBindingRecord> = {
-    lookup: (key) => values.get(key),
-    registerIfAbsent(key, value) {
-      if (values.has(key)) {
-        return false;
-      }
-      values.set(key, value);
-      return true;
-    },
-    withCurrent({ assertCurrent }) {
-      const observe = (key: string) => ({
-        value: structuredClone(values.get(key)),
-        comparison: JSON.stringify(values.get(key) ?? null),
-      });
-      return {
-        async observe(key) {
-          assertCurrent();
-          return observe(key);
-        },
-        async compareAndApply(key, comparison, intent) {
-          assertCurrent();
-          const current = observe(key);
-          if (current.comparison !== comparison) {
-            return { status: "conflict", current };
-          }
-          if (intent.action === "set") {
-            values.set(key, structuredClone(intent.value));
-            return { status: "applied" };
-          }
-          if (intent.action === "delete") {
-            values.delete(key);
-            return { status: "applied" };
-          }
-          return { status: "unchanged" };
-        },
-      };
-    },
-    deleteIf(key, predicate) {
-      const value = values.get(key);
-      return value !== undefined && predicate(value) && values.delete(key);
-    },
-  };
-  return { state, values };
-}
 
 export const bindingTestOptions = {
   // The fixture owns these opaque records, without a backend codec or retention policy.

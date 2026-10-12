@@ -25,7 +25,7 @@ vi.mock("../../sessions/session-state-events.js", () => ({
   recordSessionStateEventAsync: mocks.record,
 }));
 vi.mock("../../plugin-sdk/session-transcript-runtime.js", () => ({
-  withSessionTranscriptWriteLock: vi.fn(),
+  withSessionTranscriptWrite: vi.fn(),
 }));
 vi.mock("../../plugins/session-catalog-history-import.js", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../../plugins/session-catalog-history-import.js")>()),

@@ -1,15 +1,11 @@
 import { withClaimingHookAdmission } from "../../plugins/hook-claim-admission.js";
 import { runWithDispatchAbortSignal } from "./dispatch-from-config.abort.js";
-import {
-  admittedSessionSettingsRestrictRuntime,
-  createReplyDispatchEvent,
-} from "./dispatch-from-config.events.js";
+import { admittedSessionSettingsRestrictRuntime } from "./dispatch-from-config.events.js";
 import type { PrepareDispatchOperationReadyState } from "./dispatch-from-config.prepare-operation.js";
 
 export function runReplyDispatchHook(
   state: PrepareDispatchOperationReadyState,
   options: {
-    shouldSendToolSummaries: () => boolean;
     shouldSendToolSummariesAsync: () => Promise<boolean>;
     isTailDispatch?: true;
   },
@@ -28,10 +24,9 @@ export function runReplyDispatchHook(
         // Reset tails have entered dispatch admission; initial takeover still owns the pre-dispatch lease.
         options.isTailDispatch ? state.getDispatchAbortSignal() : state.getPreDispatchAbortSignal(),
         async () => {
-          const shouldSendFullToolDetails = await state.shouldEmitFullVerboseProgressAsync();
           state.assertProgressCurrent();
           return hookRunner.runReplyDispatch(
-            createReplyDispatchEvent({
+            {
               ctx: state.ctx,
               runId: params.replyOptions?.runId,
               sessionKey: state.acpDispatchSessionKey,
@@ -49,13 +44,11 @@ export function runReplyDispatchHook(
               originatingAccountId: state.replyContextAccountId,
               originatingThreadId: state.routeReplyThreadId,
               originatingChatType: state.replyRoute.chatType,
-              shouldSendToolSummaries: options.shouldSendToolSummaries,
               shouldSendToolSummariesAsync: options.shouldSendToolSummariesAsync,
-              shouldSendFullToolDetails,
               shouldSendFullToolDetailsAsync: state.shouldEmitFullVerboseProgressAsync,
               sendPolicy: state.sendPolicy,
               ...(options.isTailDispatch ? { isTailDispatch: true } : {}),
-            }),
+            },
             withClaimingHookAdmission(
               {
                 cfg: state.cfg,

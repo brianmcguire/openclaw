@@ -30,6 +30,3 @@ export const ensureAuthProfileStore = nativePluginBindings.authStore.ensureAuthP
 /** @deprecated Use ensureAuthProfileStoreWithoutExternalProfilesAsync. Removed at the next Plugin SDK major. */
 export const ensureAuthProfileStoreWithoutExternalProfiles =
   nativePluginBindings.authStore.ensureAuthProfileStoreWithoutExternalProfiles;
-/** @deprecated Use ensureAuthProfileStoreForLocalUpdateAsync. Removed at the next Plugin SDK major. */
-export const ensureAuthProfileStoreForLocalUpdate =
-  nativePluginBindings.authStore.ensureAuthProfileStoreForLocalUpdate;
