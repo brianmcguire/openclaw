@@ -224,13 +224,8 @@ function createPluginHandler(
     route: PlatformSendRoute,
     send: () => Promise<T>,
   ): Promise<T> => {
-    try {
-      await params.onPlatformSendStart?.(route);
-      await params.onDirectAdapterHandoff?.();
-    } catch (error) {
-      assertOutboundHandoffCurrent(params.assertDirectAdapterHandoff);
-      throw error;
-    }
+    await params.onPlatformSendStart?.(route);
+    await params.onDirectAdapterHandoff?.();
     // Keep the final authority check and adapter invocation in one synchronous
     // call stack. An awaited callback leaves a microtask gap where custody can
     // change after validation but before recipient-visible transport code runs.
@@ -265,12 +260,7 @@ function createPluginHandler(
     let result: ChannelMessageSendResult;
     let afterCommit: OutboundDeliveryCommitHook | undefined;
     try {
-      try {
-        attemptToken = await messageLifecycle.beforeSendAttempt?.(ctx);
-      } catch (error) {
-        assertOutboundHandoffCurrent(params.assertDirectAdapterHandoff);
-        throw error;
-      }
+      attemptToken = await messageLifecycle.beforeSendAttempt?.(ctx);
       result = await dispatchToAdapter(ctx, () => send(ctx));
       if (result.outcome !== "not_sent") {
         const successCtx = {

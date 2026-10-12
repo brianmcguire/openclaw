@@ -46,7 +46,8 @@ vi.mock("../process/supervisor/adapters/child.js", () => ({
     ready: Promise.resolve(),
   }),
 }));
-vi.mock("../infra/shell-env.js", () => ({
+vi.mock("../infra/shell-env.js", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../infra/shell-env.js")>()),
   getShellPathFromLoginShell: () => null,
   resolveShellEnvFallbackTimeoutMs: () => 0,
   shouldEnableShellEnvFallback: () => false,

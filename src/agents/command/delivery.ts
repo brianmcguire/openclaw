@@ -723,7 +723,6 @@ export async function deliverAgentCommandResult(
       const restartAbort = createRestartOnlyAbortSignal(opts.abortSignal);
       let send: DurableSendResult;
       try {
-        await assertPlatformSendCurrent.prepare();
         send = await sendDurableMessageBatchCore({
           cfg,
           channel: deliveryChannel,
