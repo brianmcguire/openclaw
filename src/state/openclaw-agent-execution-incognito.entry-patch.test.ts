@@ -6,6 +6,7 @@ import {
   patchSessionEntryCore,
   patchSessionEntryTarget,
 } from "../config/sessions/session-accessor.sqlite-entry.js";
+import { readTranscriptEventMessage } from "../config/sessions/session-accessor.sqlite-read.js";
 import {
   applySessionEntryCanonicalReplacements,
   applySessionEntryExactReplacements,
@@ -603,9 +604,9 @@ it.each([
         },
       },
     );
-    const work = withIncognitoSessionActor(actor, () => {
+    const work = withIncognitoSessionActor(actor, async () => {
       if (operation === "transcript") {
-        return withSessionTranscriptWriteAssertion(scope, source, () =>
+        return await withSessionTranscriptWriteAssertion(scope, source, () =>
           withTranscriptWriteSequence(scope, async (write) => {
             if (changed) {
               await patchSessionEntryCore(sourceScope, () => ({ label: "changed" }));
@@ -625,7 +626,7 @@ it.each([
           }),
         );
       }
-      return patchSessionEntryCore(
+      return await patchSessionEntryCore(
         scope,
         async () => {
           if (changed) {
@@ -657,7 +658,7 @@ it.each([
         input: { sessionKey: scope.sessionKey, sessionId, fence: {} },
       });
       assert(!("refusedOwnerSource" in events));
-      expect(events.events.filter((event) => event.type === "message")).toHaveLength(
+      expect(events.events.filter((event) => readTranscriptEventMessage(event))).toHaveLength(
         changed ? 0 : 2,
       );
     }
