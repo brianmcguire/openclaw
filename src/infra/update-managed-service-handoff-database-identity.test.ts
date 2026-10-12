@@ -8,6 +8,7 @@ import {
   createManagedHandoffLeaseDatabase,
   prepareManagedHandoffLeaseDatabase,
 } from "./update-managed-service-handoff-database.js";
+import { prepareManagedHandoffLeaseStore } from "./update-managed-service-handoff-lease.js";
 
 const dirs = useAutoCleanupTempDirTracker(afterEach);
 afterEach(() => vi.unstubAllEnvs());
@@ -81,5 +82,96 @@ it.each(["prepare", "create"] as const)(
       expect(() => createManagedHandoffLeaseDatabase(current, binding)).toThrow(expected);
     }
     expect(fs.existsSync(current)).toBe(false);
+  },
+);
+
+it.skipIf(process.platform === "win32").each([false, true])(
+  "preserves original admission through a prepared parent (aliased ancestor=%s)",
+  async (aliased) => {
+    const directory = fs.realpathSync(dirs.make("handoff-original-parent-"));
+    const root = path.join(directory, "install");
+    const parent = path.join(directory, "private");
+    fs.mkdirSync(root);
+    fs.mkdirSync(parent, { mode: 0o700 });
+    const alias = path.join(directory, "alias");
+    fs.symlinkSync(directory, alias, "dir");
+    const databasePath = path.join(aliased ? alias : directory, "private", "handoffs.sqlite");
+    const canonical = path.join(parent, "handoffs.sqlite");
+    const store = await prepareManagedHandoffLeaseStore({
+      databasePath,
+      serviceManagerEnv: process.env,
+      originalUpdateKey: root,
+    });
+    const acquired = store.acquire(root, "original-owner", { kind: "update" });
+    if (acquired.kind !== "acquired" || !acquired.originalDatabaseIdentity) {
+      throw new Error("Original owner was not admitted");
+    }
+    expect(acquired.originalDatabaseIdentity.databasePath).toBe(canonical);
+    const pinned = await prepareManagedHandoffLeaseStore({
+      databasePath: canonical,
+      existingIdentity: acquired.originalDatabaseIdentity,
+      serviceManagerEnv: process.env,
+    });
+    expect(pinned.cancelUpdate(structuredClone(acquired.lease))).toBeNull();
+    expect(pinned.cancelUpdate(acquired.lease)?.release()).toBe(true);
+    expect(pinned.read(root)).toEqual({ kind: "absent" });
+    const next = pinned.acquire(root, "next-owner", { kind: "update" });
+    expect(next.kind).toBe("acquired");
+    if (next.kind === "acquired") {
+      expect(pinned.release(next.lease)).toBe(true);
+    }
+    expect(fs.existsSync(canonical + ".lock")).toBe(false);
+  },
+);
+
+it("keeps nested prepared writers for different databases independently scoped", async () => {
+  const directory = fs.realpathSync(dirs.make("handoff-nested-databases-"));
+  const paths = ["first", "second"].map((name) => path.join(directory, name, "handoffs.sqlite"));
+  const first = await prepareManagedHandoffLeaseDatabase(paths[0]!);
+  const second = await prepareManagedHandoffLeaseDatabase(paths[1]!);
+  first(true, (firstDb) => {
+    expect(firstDb.location()).toBe(paths[0]);
+    second(true, (secondDb) => {
+      expect(secondDb.location()).toBe(paths[1]);
+      expect(paths.map((file) => fs.existsSync(file + ".lock"))).toEqual([true, true]);
+    });
+    expect(paths.map((file) => fs.existsSync(file + ".lock"))).toEqual([true, false]);
+  });
+  expect(paths.map((file) => fs.existsSync(file + ".lock"))).toEqual([false, false]);
+});
+
+it.skipIf(process.platform === "win32")(
+  "refuses a replaced prepared parent before creating storage",
+  async () => {
+    const root = fs.realpathSync(dirs.make("handoff-prepared-parent-"));
+    const directory = path.join(root, "private");
+    const databasePath = path.join(directory, "handoffs.sqlite");
+    const prepared = await prepareManagedHandoffLeaseDatabase(databasePath);
+    fs.renameSync(directory, path.join(root, "retained"));
+    fs.mkdirSync(directory, { mode: 0o700 });
+    expect(() => prepared(true, () => undefined)).toThrow();
+    expect(fs.readdirSync(directory)).toEqual([]);
+    expect(fs.readdirSync(path.join(root, "retained"))).toEqual([]);
+  },
+);
+
+it.skipIf(process.platform === "win32")(
+  "quarantines an unsafe leaf without adopting its symlink target",
+  async () => {
+    const root = fs.realpathSync(dirs.make("handoff-prepared-leaf-"));
+    const directory = path.join(root, "private");
+    const target = path.join(root, "retained.sqlite");
+    const databasePath = path.join(directory, "handoffs.sqlite");
+    fs.mkdirSync(directory, { mode: 0o700 });
+    fs.writeFileSync(target, "retained external data", { mode: 0o600 });
+    fs.symlinkSync(target, databasePath);
+    const prepared = await prepareManagedHandoffLeaseDatabase(databasePath);
+    prepared(true, () => undefined);
+    expect(fs.readFileSync(target, "utf8")).toBe("retained external data");
+    expect(fs.lstatSync(databasePath).isFile()).toBe(true);
+    const retained = fs.readdirSync(directory).filter((name) => name.includes(".unsafe-file."));
+    expect(retained).toHaveLength(1);
+    expect(fs.readlinkSync(path.join(directory, retained[0]!))).toBe(target);
+    expect(fs.existsSync(databasePath + ".lock")).toBe(false);
   },
 );
