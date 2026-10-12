@@ -143,7 +143,8 @@ content and recorded GitHub effects remain intact.
 Deprecated publication methods retain their TypeScript signatures to make the
 migration discoverable, but fail explicitly at invocation. Actual legacy use emits
 one warning per plugin and the `github-publication` family per Gateway process,
-through the shared SDK warning helper. Unknown direct SDK consumers share one
+through the shared SDK warning helper. The warning states that the method no
+longer performs publication work and names its replacement. Unknown direct SDK consumers share one
 bounded family warning. These methods will be **removed in the next Plugin SDK
 major**. Personal OAuth compatibility methods described above retain their existing
 completion behavior. No schema, stored-data, retention, or update migration is required.
@@ -539,6 +540,14 @@ SDK major and explicit breaking-release approval. No runtime warning, schema
 change, retention change, or update migration is introduced.
 
 ## Prepare session catalog identities
+
+Await `readSessionTranscriptCatalogTitleAsync({ agentId, sessionKey, storePath, entry })`
+from `openclaw/plugin-sdk/session-transcript-runtime` when deriving a catalog title.
+It preserves metadata precedence and reads the bounded first-message fallback through
+the history worker. `readSessionTranscriptCatalogPage` also uses that worker while
+retaining raw event coordinates for pagination. The synchronous
+`readSessionTranscriptCatalogTitle` remains supported in the current Plugin SDK major,
+warns once per plugin, and will be removed in the next Plugin SDK major.
 
 Use `await prepareSessionCatalogSourceActorProjector({ pluginId, sourceDomain, actors })`
 from `openclaw/plugin-sdk/session-transcript-runtime` before projecting a source catalog page.

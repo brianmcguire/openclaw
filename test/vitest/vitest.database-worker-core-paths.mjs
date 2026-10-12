@@ -23,6 +23,7 @@ export const databaseWorkerCoreTestFiles = [
   "src/agents/tools/terminal-tool.incognito.test.ts",
   "src/agents/interrupted-input-context.integration.test.ts",
   // Physical admission and descriptor custody belong to the application host, not an unhosted test Worker.
+  "src/infra/postgres-sync/locks.test.ts",
   "src/acp/runtime/session-meta-read.cache.test.ts",
   "src/state/user-profile-catalog-identity.read.test.ts",
   "src/talk/client-voice-session-store.test.ts",
@@ -1187,6 +1188,7 @@ export const databaseWorkerCoreTestFiles = [
   "src/node-host/node-worker-prepared-workspace.test.ts",
   "src/node-host/node-worker-prepared-workspace-publication.test.ts",
   "src/state/agent-deletion-journal.snapshot.test.ts",
+  "src/state/agent-deletion-journal-status.test.ts",
   "src/state/agent-deletion-journal.startup.test.ts",
   "src/state/agent-deletion-journal.native-startup.test.ts",
   "src/config/sessions/session-accessor.sqlite-branches.test.ts",

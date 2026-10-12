@@ -133,15 +133,13 @@ migration.
 
 The Gateway context exposed by `GatewayRequestHandlerOptions` from `core` and
 `gateway-runtime`, and by `getPluginRuntimeGatewayRequestScope()` from
-`plugin-runtime`, retains these synchronous contracts shipped in OpenClaw
+`plugin-runtime`, retains these synchronous placement contracts shipped in OpenClaw
 2026.9.7:
 
 - `workerSessionPlacementService.listPendingWorkspaceResults(sessionId?)`
   returns the pending result array.
 - `workerSessionPlacementService.getWorkspaceResultReconcilingSessionIds(sessionIds)`
   returns a `ReadonlySet<string>`.
-- `githubPublicationService.deferOrphanedRequests()` returns `void` after
-  orphaned requests have been deferred.
 
 Migrate to the corresponding `Async`-suffixed methods and await their results.
 The placement readers use the SQLite worker. Internal callers use the awaited
@@ -150,11 +148,17 @@ TypeScript marks those adapters deprecated. They retain their result shapes and
 completion timing until the next Plugin SDK major and an explicitly approved
 breaking release. No schema, retained data, or update migration changes.
 
+`githubPublicationService.deferOrphanedRequests()` retains its `void` signature
+but now fails at invocation; use `await deferOrphanedRequestsAsync()` to defer
+orphaned requests. Other deprecated publication methods likewise retain their
+signatures only for migration discovery and fail with replacement guidance.
+
 GitHub publication's opaque requester, `personalStatus`, and synchronous lifecycle methods, plus
 managed OAuth `cancelAuthorization` and `retireProfile`, and personal OAuth
 `cancelAuthorization` and `disconnect`, share the
-`github-publication` runtime warning budget. The personal OAuth methods retain
-their synchronous results until the same removal gate; migrate to
+`github-publication` runtime warning budget. The OAuth methods retain
+their synchronous results until the same removal gate; migrate managed OAuth to
+`cancelAuthorizationAsync` and `retireProfileAsync`, and personal OAuth to
 `cancelAuthorizationAsync` and `disconnectAsync`. Publication status readers use
 `await personalStatusAsync(...)` with the same arguments. Follow the
 [V2 request and lifecycle migration](/plugins/sdk-migration/how-to-migrate#await-github-publication-operations)
