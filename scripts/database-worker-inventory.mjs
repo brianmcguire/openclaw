@@ -204,7 +204,40 @@ const reviewed = new Map([
     "src/config/sessions/conversation-registry.ts",
     {
       priority: 99,
-      evidence: "Reaction bindings use worker; other synchronous registry callers remain",
+      evidence:
+        "Async registry reads use the session actor or session-transcript.worker.ts. selectConversationRows remains native for incognito, deprecated SDK getConversationSession, and session-entry-current-check.ts's retained synchronous source assertion; do not classify the shared read as worker-only.",
+    },
+  ],
+  [
+    "src/config/sessions/session-accessor.sqlite-conversation-read.ts",
+    {
+      priority: 99,
+      evidence:
+        "session-transcript.worker.ts and session-source-predicate.worker.ts read conversation rows in workers; conversation-registry.ts and entry-mutation.ts retain native incognito, deprecated SDK, and borrowed transaction callers. The shared query remains mixed.",
+    },
+  ],
+  [
+    "src/config/sessions/session-accessor.sqlite-conversation.ts",
+    {
+      priority: 99,
+      evidence:
+        "All mutations flow through writeSessionEntry in entry-store.ts, or conversation.register in openclaw-agent-execution-operations.ts. The latter is worker-only; writeSessionEntry also serves native incognito, opaque SDK transactions, and CLI import. Preserve the mixed classification of the shared identity and association kernels.",
+    },
+  ],
+  [
+    "src/config/sessions/session-accessor.sqlite-delete-snapshot.ts",
+    {
+      priority: 99,
+      evidence:
+        "Archive, cold-storage, cleanup and lifecycle workers use this deletion snapshot; offline full-store reset, deprecated SessionManager reload, and native lifecycle/opaque SDK transactions also reach it. These checks prevent deleting changed user data; the shared snapshot is not worker-only.",
+    },
+  ],
+  [
+    "src/config/sessions/session-accessor.sqlite-archive-transaction.ts",
+    {
+      priority: 99,
+      evidence:
+        "reclaimSqliteSessionInTransaction dispatches archive metadata writes in mutation workers; archive-store.ts also calls it only in its !supportsOpenClawAgentDatabaseExecution native branch. Durable publication uses publishSessionStateArchivesInWorker; native incognito/compatibility publication remains.",
     },
   ],
   [
@@ -411,6 +444,27 @@ const reviewedOperations = new Map([
         ],
         evidence:
           "Only offline full-store reset calls these at session-accessor.sqlite-reset.ts:65,239 via commands/cleanup-utils.ts; other archive operations retain native lifecycle callers",
+      },
+      {
+        tier: "T1",
+        operations: ["hasPendingSessionTranscriptArchives"],
+        evidence:
+          "Entry/lifecycle reader workers and replacement-state.ts query pending publication. Replacement-state also serves native incognito and opaque SDK replacement transactions; keep this shared read mixed.",
+      },
+      {
+        tier: "T1",
+        operations: [
+          "prepareSessionTranscriptArchivePublishPlans",
+          "recordSessionTranscriptArchivePublishResults",
+        ],
+        evidence:
+          "Durable archive publication uses openclaw-agent-execution-operations.ts workers. archive-transaction.ts retains the !supportsOpenClawAgentDatabaseExecution native publication path from archive-store.ts; no worker-only classification while that compatibility/incognito owner remains.",
+      },
+      {
+        tier: "T1",
+        operations: ["persistSessionTranscriptArchive"],
+        evidence:
+          "Only lifecycle-state.ts deleteMaterializedSessionStatePlans inserts the canonical recovery copy. That lifecycle kernel serves mutation workers plus native incognito and opaque SDK deletion transactions; retain the shared user-data integrity check and mixed tier.",
       },
     ],
   ],
@@ -1008,6 +1062,12 @@ const reviewedOperations = new Map([
         ],
         evidence:
           "Only session-transcript.worker.ts:230 (presence) and session-accessor.sqlite-archive.worker.ts:483,491 (page/final) call these readers; shared archive listing remains T1.",
+      },
+      {
+        tier: "T1",
+        operations: ["listTranscriptArchivesFromDatabase"],
+        evidence:
+          "Durable archive enumeration reaches this query through transcript, Memory corpus, and usage-cost workers. session-transcript-inventory-runtime.ts retains its native incognito branch; deprecated loadArchivedSessions rejects unbound durable sync access. The shared list kernel remains mixed.",
       },
     ],
   ],
@@ -2775,7 +2835,7 @@ function render(rows) {
     "",
     "## Scope and interpretation",
     "",
-    "T1 is request/event/timer exposure, including conservatively retained runtime or mixed kernels whose callers still need tracing. T1-compat is deprecated-only SDK compatibility, named shared kernels, and closed receiver families whose only main-thread paths originate at mechanically guarded deprecated APIs. Worker/maintenance callers retain their existing classification; escaped callbacks, shared async/sync receivers, and unproven factories remain live. Class-definition effects, inheritance, and fields also remain unproven. T2 is startup, migration, or a named boot/lock exception candidate. T3 is CLI, Doctor, or developer one-shot code. W marks worker implementations separately: their synchronous SQL is intentional and is not outstanding main-thread debt. A filename-based T2/T3/W classification is an audit lead, not a proof that every caller is safe. Do not move a mixed kernel or a module with ‘worker’ in its name to W without tracing its callers.",
+    "T1 is request/event/timer exposure, including conservatively retained runtime or mixed kernels whose callers still need tracing. T1-compat is deprecated-only SDK compatibility and named shared kernels whose only main-thread paths originate at mechanically guarded deprecated APIs. Worker/maintenance callers retain their existing classification; escaped callbacks and returned-method families remain live/unproven. T2 is startup, migration, or a named boot/lock exception candidate. T3 is CLI, Doctor, or developer one-shot code. W marks worker implementations separately: their synchronous SQL is intentional and is not outstanding main-thread debt. A filename-based T2/T3/W classification is an audit lead, not a proof that every caller is safe. Do not move a mixed kernel or a module with ‘worker’ in its name to W without tracing its callers.",
     "",
     "Reviewed mixed modules classify calls by their named lexical operation path, optionally narrowed to a variable initializer or an exact synchronous guard. These qualifiers exclude nested function bodies, and a guard applies only to its then-branch, so unrelated sites remain conservative even when source lines move. Other file tiers retain the broadest applicable counted exposure, including explicit worker/maintenance mixtures. Each file has at most one row per tier; tier file counts overlap, while total files and call expressions are unique. These are not measured runtime call counts. Recheck the operation and all registered callers before changing its classification. Maintenance invoked by Gateway timers remains T1. Prepared results never confer current authority; follow [worker access](/reference/database-schemas/worker-access).",
     "",
