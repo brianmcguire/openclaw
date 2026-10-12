@@ -238,8 +238,8 @@ export function createPluginRuntimeResolver(state: PluginRegistryState) {
         if (prop === "config") {
           const config: PluginRuntime["config"] = getRuntimeProperty();
           const readCurrent = () => runWithPluginScope(() => config.current(), false);
-          function current(): ReturnType<typeof readCurrent>;
           function current(options: { clone: true }): OpenClawConfig;
+          function current(): ReturnType<typeof readCurrent>;
           function current(options?: { clone: true }) {
             return options
               ? runWithPluginScope(() => config.current(options), false)

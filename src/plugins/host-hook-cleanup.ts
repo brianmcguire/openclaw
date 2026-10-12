@@ -396,7 +396,7 @@ export function createPluginHostRegistryRetirement(params: {
       ? () =>
           runContextCleanup(async () => {
             result = await runPluginHostCleanup({
-              cfg: cfg ?? (await readConfig()),
+              cfg: params.skipPersistentSessionState ? cfg : (cfg ?? (await readConfig())),
               registry: previousRegistry,
               pluginId,
               reason: restarted ? "restart" : "disable",

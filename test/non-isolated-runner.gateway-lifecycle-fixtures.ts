@@ -6,7 +6,7 @@ export function gatewayWorkerLifetimeFixtureFiles(repoRoot: string): Record<stri
 import path from "node:path";
 import { afterAll, expect, it } from "vitest";
 import { openOpenClawStateDatabase, closeOpenClawStateDatabase } from ${source("state/openclaw-state-db.ts")};
-import { prepareClawInstallSchemaVersions, readCachedClawInstallSchemaVersions, registerClawInstallSchemaVersionSnapshotListener } from ${source("claws/provenance-runtime-read.ts")};
+import { initializeCachedClawInstallSchemaVersions, readCachedClawInstallSchemaVersions, registerClawInstallSchemaVersionSnapshotListener } from ${source("claws/provenance-runtime-read.ts")};
 const root = process.env.GATEWAY_LIFETIME_PROBE_ROOT!;
 const log = path.join(root, "events.log");
 const lines = () => readFileSync(log, "utf8").trim().split("\\n");
@@ -29,10 +29,10 @@ let database: ReturnType<typeof openOpenClawStateDatabase>;
 registerClawInstallSchemaVersionSnapshotListener(() => {
   appendFileSync(log, "A:" + readCachedClawInstallSchemaVersions(options).kind + "\\n");
 });
-it("keeps live provenance notifications through afterAll", async () => {
+it("keeps live provenance notifications through afterAll", () => {
   database = openOpenClawStateDatabase(options);
   expect(database.db.isOpen).toBe(true);
-  (await prepareClawInstallSchemaVersions(options)).publish();
+  initializeCachedClawInstallSchemaVersions(options);
   expect(lines()).toContain("A:ready");
 });
 afterAll(() => {
@@ -46,7 +46,7 @@ const options = { env: { OPENCLAW_STATE_DIR: path.join(root, "observer-state") }
 registerClawInstallSchemaVersionSnapshotListener(() => {
   appendFileSync(log, "B:" + readCachedClawInstallSchemaVersions(options).kind + "\\n");
 });
-it("drains the prior file and retires its provenance generation", async () => {
+it("drains the prior file and retires its provenance generation", () => {
   const prior = lines();
   const afterAll = prior.indexOf("A:afterAll-open");
   expect(afterAll).toBeGreaterThanOrEqual(0);
@@ -56,7 +56,7 @@ it("drains the prior file and retires its provenance generation", async () => {
   try {
     const database = openOpenClawStateDatabase(options);
     expect(database.db.isOpen).toBe(true);
-    (await prepareClawInstallSchemaVersions(options)).publish();
+    initializeCachedClawInstallSchemaVersions(options);
     closeOpenClawStateDatabase();
     expect(database.db.isOpen).toBe(false);
     const observed = lines().slice(before);

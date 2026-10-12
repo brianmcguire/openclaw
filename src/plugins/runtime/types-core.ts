@@ -347,9 +347,10 @@ export type PluginRuntimeCore = {
   config: {
     /** Current process runtime config snapshot. Prefer config passed into the active call path. */
     current: {
-      (): DeepReadonly<import("../../config/types.openclaw.js").OpenClawConfig>;
       /** Independent mutable copy retaining the published config's resolution facts. */
       (options: { clone: true }): import("../../config/types.openclaw.js").OpenClawConfig;
+      /** Keep the default last so ReturnType consumers retain the readonly snapshot. */
+      (): DeepReadonly<import("../../config/types.openclaw.js").OpenClawConfig>;
     };
     /**
      * Persist a focused config mutation. Callers must choose the post-write
