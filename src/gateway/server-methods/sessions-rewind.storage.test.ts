@@ -10,6 +10,7 @@ import {
 } from "../../../packages/gateway-protocol/src/index.js";
 import { awaitGateBeforeSettlement } from "../../../test/helpers/promise.js";
 import { observeHostDataSql } from "../../../test/helpers/sqlite-statement-execution-counter.js";
+import { captureRuntimeConfigAsyncReader } from "../../config/config.js";
 import { resolveInternalSessionEffectsIdentity } from "../../config/sessions/internal-session-key.js";
 import { resolveSessionStorePathCore } from "../../config/sessions/paths.js";
 import {
@@ -85,6 +86,7 @@ it.each(mutationMethods)(
   async (method) => {
     await withOpenClawTestState({ label: "message-cut-initializing-source" }, async (testState) => {
       await testState.writeConfig(cfg);
+      await captureRuntimeConfigAsyncReader()();
       const runtime = createRuntimeAgent();
       const key = "agent:main:dashboard:initializing-source";
       const initialized = createDeferredCore();
@@ -154,6 +156,7 @@ it.each([
 ])("lists $kind session branches without decoding saved snapshots", async ({ hidden }) => {
   await withOpenClawTestState({ label: "branch-list-bounded-read" }, async (state) => {
     await state.writeConfig(cfg);
+    await captureRuntimeConfigAsyncReader()();
     const identity = hidden
       ? resolveInternalSessionEffectsIdentity({ agentId: "main", runId: "branch-list-hidden" })
       : undefined;
@@ -227,6 +230,7 @@ it.each([
   async (testCase) => {
     await withOpenClawTestState({ label: "message-cut-worker-boundary" }, async (state) => {
       await state.writeConfig(cfg);
+      await captureRuntimeConfigAsyncReader()();
       const scope = await seedMessageCutSource();
       await waitForSessionTranscriptIndexReconcile({ agentId: scope.agentId });
       const original = await loadTranscriptEvents(scope);
@@ -304,6 +308,7 @@ it.each(mutationMethods)(
   async (method) => {
     await withOpenClawTestState({ label: "message-cut-initialization-cache" }, async (state) => {
       await state.writeConfig(cfg);
+      await captureRuntimeConfigAsyncReader()();
       const scope = await seedMessageCutSource();
       // Another process can publish a pending row without touching this process's entry cache.
       listSessionEntriesCore({ agentId: scope.agentId });
@@ -462,6 +467,7 @@ it.each(
   async ({ method, lockWhileQueued }) => {
     await withOpenClawTestState({ label: "message-cut-locked-owner" }, async (testState) => {
       await testState.writeConfig(cfg);
+      await captureRuntimeConfigAsyncReader()();
       const scope = await seedMessageCutSource();
       let before: Awaited<ReturnType<typeof readMutationStorage>> | undefined;
       const lockSource = async () => {
@@ -510,6 +516,7 @@ describe("sessions.fork storage ownership", () => {
     async ({ kind, incognito }) => {
       await withOpenClawTestState({ label: "message-fork-storage" }, async (testState) => {
         await testState.writeConfig(cfg);
+        await captureRuntimeConfigAsyncReader()();
         const sourceScope = await seedMessageCutSource(incognito);
         const { sessionKey } = sourceScope;
         const repository = kind.startsWith("repository")
@@ -705,6 +712,7 @@ describe.each(["sessionMutationCommitGuard", "sessionMutationAuthorization"] as 
       async (method) => {
         await withOpenClawTestState({ label: "message-cut-authority" }, async (testState) => {
           await testState.writeConfig(cfg);
+          await captureRuntimeConfigAsyncReader()();
           const scope = await seedMessageCutSource();
           await waitForSessionTranscriptIndexReconcile({ agentId: scope.agentId });
           const before = await readMutationStorage(scope);
@@ -758,6 +766,7 @@ it.each(["SQLite writer fault injection", "public lifecycle predecessor"] as con
   async (revocation) => {
     await withOpenClawTestState({ label: "message-fork-participation" }, async (testState) => {
       await testState.writeConfig(cfg);
+      await captureRuntimeConfigAsyncReader()();
       const scope = await seedMessageCutSource();
       addSessionMember(scope, {
         identityId: "member",
@@ -827,6 +836,7 @@ it.each(["SQLite writer fault injection", "public lifecycle predecessor"] as con
 it("sessions.fork retains member authority while restoring cold source history", async () => {
   await withOpenClawTestState({ label: "message-cut-cold-restore" }, async (testState) => {
     await testState.writeConfig(cfg);
+    await captureRuntimeConfigAsyncReader()();
     const scope = await seedMessageCutSource();
     addSessionMember(scope, {
       identityId: "member",
