@@ -1,5 +1,4 @@
 import type { ContextEngineTurnOutboxWorkerOperations } from "../../agents/harness/context-engine-turn-outbox.js";
-import type { HeartbeatOutcomeWorkerOperations } from "../../infra/heartbeat-outcome-store.worker.js";
 import type { MessageToolRunOutcomeInsert } from "../../infra/message-tool-run-outcome-store.kernel.js";
 import type {
   SqliteTrajectoryRuntimeAppend,
@@ -37,8 +36,6 @@ export type SessionActorMemorySideEffectsWrites = Omit<
   OutboxOperations,
   keyof SessionActorMemorySideEffectsReads
 > & {
-  "session.heartbeat.persist": HeartbeatOutcomeWorkerOperations["persist"];
-  "session.heartbeat.claim": HeartbeatOutcomeWorkerOperations["claim"];
   "session.messageToolOutcome.record": { input: MessageToolRunOutcomeInsert; output: void };
   "session.trajectory.append": { input: SqliteTrajectoryRuntimeAppend; output: void };
 };
