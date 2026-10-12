@@ -70,8 +70,7 @@ export class CodexNativeSubagentCompletionDelivery {
         childState.cancellationRequested &&
         childState.pendingCompletion?.status === "cancelled"
       ) {
-        // Stop suppresses a new wake; an already accepted delivery retains its receipts.
-        this.dependencies.unregisterChild(childState);
+        // Stop owns durable cancellation acknowledgement before releasing this child.
         return;
       }
       if (!this.prepareDelivery(state, childState)) {

@@ -99,6 +99,9 @@ export async function abortControlledSubagents(params: {
       commandErrors.push(error);
     }
     const settledNative = await native;
+    if (settledNative?.status === "fulfilled") {
+      commandErrors.push(...(settledNative.value.errors ?? []));
+    }
     if (settledNative?.status === "rejected") {
       commandErrors.push(settledNative.reason);
     }
@@ -107,13 +110,16 @@ export async function abortControlledSubagents(params: {
       (settledNative?.status === "fulfilled" ? settledNative.value.killed : 0);
     const cancelledRequesters =
       settledNative?.status === "fulfilled" ? settledNative.value.cancelledRequesters : [];
-    if (failure) {
+    if (failure && !settledNative && !descendants && !execAborted) {
       throw commandErrors.length > 0
         ? new AggregateError(
             [failure.error, ...commandErrors],
             "Request cancellation was incomplete",
           )
         : failure.error;
+    }
+    if (failure) {
+      commandErrors.push(failure.error);
     }
     if (commandErrors.length > 0) {
       return {
@@ -140,6 +146,7 @@ export async function abortControlledSubagents(params: {
   if (!params.sessionId) {
     return stop(async () => ({ killed: 0, cancelledRequesters: [] }));
   }
+  let completed: Awaited<ReturnType<typeof stop>>;
   try {
     return await withAgentHarnessDescendantCancellation(
       {
@@ -151,11 +158,27 @@ export async function abortControlledSubagents(params: {
         acceptsRequest,
         assertCurrent: () => params.assertCurrent?.(),
       },
-      stop,
+      async (cancel) => {
+        completed = await stop(cancel);
+        return completed;
+      },
     );
   } catch (error) {
     if (stopEntered) {
-      throw error;
+      if (!completed) {
+        throw error;
+      }
+      // Keep settled cancellations when the harness loses authority after its callback.
+      return {
+        ...completed,
+        status: "error" as const,
+        error: [
+          completed.status === "error" ? completed.error : undefined,
+          formatErrorMessage(error),
+        ]
+          .filter(Boolean)
+          .join("; "),
+      };
     }
     // A stale native reservation must not strand an independently captured parent.
     // Stop that parent once, but report its descendants as unconfirmed.

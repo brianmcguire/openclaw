@@ -41,12 +41,13 @@ export async function withAgentHarnessDescendantCancellation<T>(
         }
         called = true;
         const results = await Promise.allSettled(cancellations.map((cancel) => cancel()));
-        params.assertCurrent();
         const errors = results.flatMap((result) =>
-          result.status === "rejected" ? [result.reason] : [],
+          result.status === "rejected" ? [result.reason] : [...(result.value.errors ?? [])],
         );
-        if (errors.length) {
-          throw new AggregateError(errors, "Harness descendant cancellation did not settle");
+        try {
+          params.assertCurrent();
+        } catch (error) {
+          errors.push(error);
         }
         return results.reduce<AgentHarnessDescendantCancellationResult>(
           (total, result) => {
@@ -56,7 +57,7 @@ export async function withAgentHarnessDescendantCancellation<T>(
             }
             return total;
           },
-          { killed: 0, cancelledRequesters: [] },
+          { killed: 0, cancelledRequesters: [], ...(errors.length ? { errors } : {}) },
         );
       });
     }
@@ -80,7 +81,11 @@ export async function withAgentHarnessDescendantCancellation<T>(
         cancellations.push(async () => {
           assertCurrent();
           const count = await cancel();
-          assertCurrent();
+          try {
+            assertCurrent();
+          } catch (error) {
+            return { ...count, errors: [...(count.errors ?? []), error] };
+          }
           return count;
         });
         return prepareNext(index + 1);

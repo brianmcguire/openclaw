@@ -453,6 +453,8 @@ export type AgentHarnessModelCatalogResult =
 
 export type AgentHarnessDescendantCancellationResult = {
   killed: number;
+  /** Settlement failures do not erase already acknowledged sibling cancellations. */
+  errors?: readonly unknown[];
   cancelledRequesters: Array<{
     agentId: string;
     sessionKey: string;

@@ -1,12 +1,25 @@
+import type { AgentHarnessCompletionCustody } from "openclaw/plugin-sdk/agent-harness-completion";
 import { resetPluginStateStoreForTests } from "openclaw/plugin-sdk/plugin-state-test-runtime";
 import { closeOpenClawStateDatabaseAsync } from "openclaw/plugin-sdk/sqlite-runtime-testing";
 import { useAutoCleanupTempDirTracker } from "openclaw/plugin-sdk/test-env";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   createCodexNativeSubagentHistoryOwner,
   type CodexNativeSubagentHistoryOwner,
 } from "./native-subagent-history-owner.js";
-import type { CodexNativeSubagentSubmission } from "./native-subagent-submission.js";
+import {
+  CodexNativeSubagentMonitor,
+  createClient,
+  createRuntime,
+  createCompletionScope,
+  childTurnCompletedNotification,
+  threadRead,
+} from "./native-subagent-monitor.test-support.js";
+import type { CodexNativeSubagentAssignmentStore } from "./native-subagent-pending-assignments.js";
+import type {
+  CodexNativeSubagentSubmission,
+  CodexNativeSubagentSubmissionStore,
+} from "./native-subagent-submission.js";
 import { scopeCodexRunBindingStore } from "./session-binding-scope.js";
 import { createLazyCodexAppServerBindingStore } from "./session-binding-store.js";
 import {
@@ -81,6 +94,144 @@ async function fixture(initialReceipt?: CodexNativeSubagentSubmission) {
 }
 
 describe("native subagent submission receipts in the binding store", () => {
+  it.each(["receipt", "assignment"] as const)(
+    "Stop preserves recovery across a rejected %s acknowledgement and consumes it on retry",
+    async (rejectedOwner) => {
+      const f = await fixture(receipt);
+      let store = f.store;
+      const { root, owner } = f;
+      const assignment = {
+        runId: "codex-thread:child-thread:turn:child-turn-b",
+        childThreadId: receipt.childThreadId,
+        nativeTurnId: receipt.submissionId,
+        nativeParentThreadId: binding.threadId,
+        owner,
+        submission: receipt,
+      };
+      await store.mutate(
+        identity,
+        { kind: "record-native-subagent-assignment", owner, assignment },
+        currentAuthority,
+      );
+      let reject = true;
+      const assertCurrent = () => {
+        if (store.read(identity)?.threadId !== binding.threadId) {
+          throw new Error("Cancellation binding changed");
+        }
+      };
+      const assignmentStore: CodexNativeSubagentAssignmentStore = {
+        assertCurrent,
+        read: () => store.readNativeSubagentAssignments?.(identity, owner) ?? [],
+        record: (value, guard) =>
+          store.mutate(
+            identity,
+            { kind: "record-native-subagent-assignment", owner, assignment: value },
+            guard,
+          ),
+        consume: (value, guard) =>
+          reject && rejectedOwner === "assignment"
+            ? Promise.resolve(false)
+            : store.mutate(
+                identity,
+                { kind: "consume-native-subagent-assignment", owner, assignment: value },
+                guard,
+              ),
+      };
+      const consumeReceipt = vi.fn<CodexNativeSubagentSubmissionStore["consume"]>((value, guard) =>
+        reject && rejectedOwner === "receipt"
+          ? Promise.resolve(false)
+          : store.mutate(
+              identity,
+              { kind: "consume-native-subagent-submission", owner, receipt: value },
+              guard,
+            ),
+      );
+      const submissionStore: CodexNativeSubagentSubmissionStore = {
+        assertCurrent,
+        read: () => store.readNativeSubagentSubmissions(identity, owner),
+        record: (value, guard) =>
+          store.mutate(
+            identity,
+            { kind: "record-native-subagent-submission", owner, receipt: value },
+            guard,
+          ),
+        consume: consumeReceipt,
+      };
+      const client = createClient();
+      client.setThreadRead(
+        receipt.childThreadId,
+        threadRead({ turnId: receipt.submissionId, status: "inProgress", threadStatus: "active" }),
+      );
+      const runtime = createRuntime();
+      const custody: AgentHarnessCompletionCustody = {
+        signal: new AbortController().signal,
+        isCurrent: () => true,
+        retain: () => custody,
+        settleExecution() {},
+        release() {},
+      };
+      runtime.captureAgentHarnessCompletionCustody.mockResolvedValue(custody);
+      const interrupt = vi.fn(async (_threadId: string, _turnId: string, guard: () => void) => {
+        guard();
+        await client.notify(
+          childTurnCompletedNotification({ turnId: receipt.submissionId, status: "interrupted" }),
+        );
+        return true;
+      });
+      const monitor = new CodexNativeSubagentMonitor(client.client, runtime, {
+        recoveryPollDelaysMs: [],
+        interruptChildAndWait: interrupt,
+      });
+      const parent = await monitor.registerParent({
+        parentThreadId: binding.threadId,
+        requesterSessionKey: identity.sessionKey,
+        requesterTurnRunId: "parent-run",
+        agentId: identity.agentId,
+        historyOwner: owner,
+        completionScope: createCompletionScope(identity.sessionKey),
+        assignmentStore,
+        submissionStore,
+      });
+      const stop = () =>
+        monitor.withDescendantCancellation(
+          {
+            parentThreadId: binding.threadId,
+            agentId: identity.agentId,
+            sessionKey: identity.sessionKey,
+            sessionId: identity.sessionId,
+            lifecycleRevision: owner.lifecycleRevision,
+            acceptsRequest: () => true,
+            assertCurrent,
+          },
+          (cancel) => cancel(),
+        );
+      const reopen = async () => {
+        await closeOpenClawStateDatabaseAsync();
+        resetPluginStateStoreForTests();
+        store = createLazyCodexAppServerBindingStore(openState(root));
+      };
+      try {
+        const failed = await stop();
+        expect(failed.killed).toBe(0);
+        expect(failed.errors).toHaveLength(1);
+        await reopen();
+        expect(assignmentStore.read()).toHaveLength(1);
+        expect(submissionStore.read()).toEqual(rejectedOwner === "receipt" ? [receipt] : []);
+        reject = false;
+        expect(await stop()).toMatchObject({ killed: 1 });
+        expect(interrupt).toHaveBeenCalledOnce();
+        expect(consumeReceipt).toHaveBeenCalledTimes(rejectedOwner === "receipt" ? 2 : 1);
+        await reopen();
+        expect(assignmentStore.read()).toEqual([]);
+        expect(submissionStore.read()).toEqual([]);
+        expect(runtime.deliverAgentHarnessCompletion).not.toHaveBeenCalled();
+      } finally {
+        await parent.unregister();
+        await monitor.dispose();
+      }
+    },
+  );
+
   it("reopens initial assignment facts across native rotation but not physical adoption", async () => {
     const { root, store, owner } = await fixture();
     const assignment = {

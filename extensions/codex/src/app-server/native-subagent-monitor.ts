@@ -727,12 +727,24 @@ class Monitor {
             }
             await this.completionDelivery.join(child);
             assertCurrent();
+            const cancelled =
+              child.cancellationRequested && child.pendingCompletion?.status === "cancelled";
+            if (cancelled && this.childStates.get(child.runId) === child) {
+              assertChild();
+              await this.submissions.settleCancelled(state, child, assertChild);
+              assertChild();
+              await this.assignments.settleCancelled(state, child, assertChild);
+              assertChild();
+              this.unregisterChild(child);
+            }
             if (this.childStates.get(child.runId) === child) {
               throw new Error("Codex descendant completion delivery remains unsettled");
             }
-            await this.assignments.drain(state);
-            await this.submissions.drain(state);
-            assertCurrent();
+            if (!cancelled) {
+              await this.assignments.drain(state);
+              await this.submissions.drain(state);
+              assertCurrent();
+            }
             if (
               child.requesterTurnRunId !== requesterTurnRunId ||
               child.requestCustody !== requestCustody ||
@@ -741,8 +753,6 @@ class Monitor {
             ) {
               throw new Error("Codex descendant requester changed during settlement");
             }
-            const cancelled =
-              child.cancellationRequested && child.pendingCompletion?.status === "cancelled";
             return {
               killed: cancelled ? 1 : 0,
               cancelledRequesters:
@@ -761,7 +771,14 @@ class Monitor {
           }),
         );
         const completedRegistrations = await registrationResults;
-        assertCurrent();
+        const failed = [...results, ...completedRegistrations].flatMap((result) =>
+          result.status === "rejected" ? [result.reason] : [],
+        );
+        try {
+          assertCurrent();
+        } catch (error) {
+          failed.push(error);
+        }
         const pending = [...this.knownChildren.values()].some(
           (known) =>
             states.includes(known.parent) &&
@@ -773,13 +790,7 @@ class Monitor {
             }),
         );
         if (reservation.lateAdmission || pending) {
-          throw new Error("Codex descendant admission remains unsettled after cancellation");
-        }
-        const failed = [...results, ...completedRegistrations].flatMap((result) =>
-          result.status === "rejected" ? [result.reason] : [],
-        );
-        if (failed.length) {
-          throw new AggregateError(failed, "Codex descendant cancellation did not settle");
+          failed.push(new Error("Codex descendant admission remains unsettled after cancellation"));
         }
         return results.reduce<NativeDescendantCancellationResult>(
           (total, result) => {
@@ -789,7 +800,7 @@ class Monitor {
             }
             return total;
           },
-          { killed: 0, cancelledRequesters: [] },
+          { killed: 0, cancelledRequesters: [], ...(failed.length ? { errors: failed } : {}) },
         );
       });
       assertCurrent();

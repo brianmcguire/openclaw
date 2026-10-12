@@ -652,7 +652,6 @@ export const sessionAbortHandlers: GatewayRequestHandlers = {
         onDescendantsCancelled: (result) => {
           descendantsCancelled = true;
           if (
-            result.status === "ok" &&
             nativeYieldedCandidate &&
             result.cancelledRequesters.some(
               (fact) =>

@@ -285,7 +285,6 @@ it("fences selected late admissions while preserving another request during sess
     { ...requester, requesterTurnRunId: undefined },
     (cancel) => cancel(),
   );
-  const rejected = expect(stop).rejects.toThrow("admission remains unsettled");
   try {
     await awaitGateBeforeSettlement(f.interrupted, stop, "Stop skipped the selected child");
     const siblingRelease = vi.fn();
@@ -321,7 +320,20 @@ it("fences selected late admissions while preserving another request during sess
     expect(f.claimDirectChild).toHaveBeenCalledExactlyOnceWith("child-thread");
     expect(f.releaseChild).not.toHaveBeenCalled();
     await f.client.notify(childTurnCompletedNotification({ status: "interrupted" }));
-    await rejected;
+    expect(await stop).toEqual({
+      killed: 1,
+      cancelledRequesters: [
+        {
+          agentId: requester.agentId,
+          sessionKey,
+          sessionId: requester.sessionId,
+          lifecycleRevision: requester.lifecycleRevision,
+          requesterTurnRunId: requester.requesterTurnRunId,
+        },
+      ],
+      errors: [new Error("Codex descendant admission remains unsettled after cancellation")],
+    });
+    expect(siblingRelease).not.toHaveBeenCalled();
     expect(f.releaseChild).toHaveBeenCalledOnce();
   } finally {
     f.client.close();

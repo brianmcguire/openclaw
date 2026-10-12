@@ -81,7 +81,15 @@ async function seedYieldedParent() {
   expect(loadSessionEntry(target)?.status).toBeUndefined();
 }
 
-it.each(["cancelled", "natural success", "new run", "new revision", "failed settlement"] as const)(
+it.each([
+  "cancelled",
+  "natural success",
+  "new run",
+  "new revision",
+  "failed settlement",
+  "partial settlement",
+  "retired owner",
+] as const)(
   "registered sessions.abort preserves the %s outcome of a native-only yielded parent",
   async (race) => {
     await seedYieldedParent();
@@ -97,6 +105,9 @@ it.each(["cancelled", "natural success", "new run", "new revision", "failed sett
         ? { killed: 0, cancelledRequesters: [] }
         : {
             killed: 1,
+            ...(race === "partial settlement"
+              ? { errors: [new Error("Sibling cancellation failed")] }
+              : {}),
             cancelledRequesters: [
               { ...target, sessionId, lifecycleRevision, requesterTurnRunId: runId },
             ],
@@ -104,7 +115,11 @@ it.each(["cancelled", "natural success", "new run", "new revision", "failed sett
     });
     installHarness(async (params, run) => {
       expect(params).toMatchObject({ ...target, sessionId, lifecycleRevision });
-      return run(cancel);
+      const result = await run(cancel);
+      if (race === "retired owner") {
+        setActivePluginRegistry(createEmptyPluginRegistry());
+      }
+      return result;
     });
     const respond = vi.fn<RespondFn>();
     const context = createChatAbortContext({
@@ -157,12 +172,16 @@ it.each(["cancelled", "natural success", "new run", "new revision", "failed sett
       settled.resolve();
       await stop;
       expect(cancel).toHaveBeenCalledOnce();
-      if (race === "failed settlement") {
+      if (
+        race === "failed settlement" ||
+        race === "partial settlement" ||
+        race === "retired owner"
+      ) {
         expect(respond.mock.calls[0]?.[0]).toBe(false);
       } else {
         expect(respond.mock.calls[0]?.[0]).toBe(true);
       }
-      if (race === "cancelled") {
+      if (race === "cancelled" || race === "partial settlement" || race === "retired owner") {
         expect(loadSessionEntry(target)).toMatchObject({
           sessionId,
           lastRunId: runId,
