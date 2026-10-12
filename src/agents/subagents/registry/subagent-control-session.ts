@@ -91,7 +91,7 @@ export async function prepareSubagentKillSession(
   const storePath = selected?.storePath ?? childOwner.storePath;
   const taskAuthority = requesterOwnedRun && resolveSubagentChildAuthority(requesterOwnedRun);
   const prepareLegacySession = (
-    currentSession?: Pick<SessionEntry, "sessionId"> | null,
+    currentSession?: Pick<SessionEntry, "sessionId">,
   ): SubagentKillSession | undefined => {
     if (
       requesterOwnedRun?.childSessionKey !== sessionKey ||
@@ -136,7 +136,8 @@ export async function prepareSubagentKillSession(
           throw read.error;
         }
         const entry = read.value;
-        const readLegacySession = prepareLegacySession(entry ?? null);
+        // An absent child row is missing evidence, not a conflicting incarnation.
+        const readLegacySession = prepareLegacySession(entry);
         if (readLegacySession) {
           return readLegacySession;
         }

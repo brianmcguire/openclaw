@@ -7,7 +7,10 @@ import { clearActiveEmbeddedRun, setActiveEmbeddedRun } from "../../embedded-age
 import { createEmbeddedRunHandle } from "../../embedded-agent-runner/runs.test-support.js";
 import { killSubagentRunAdmin } from "./subagent-control.js";
 import { SUBAGENT_ENDED_REASON_KILLED } from "./subagent-lifecycle-events.js";
-import { writeSubagentSessionEntry } from "./subagent-registry.persistence.test-support.js";
+import {
+  removeSubagentSessionEntry,
+  writeSubagentSessionEntry,
+} from "./subagent-registry.persistence.test-support.js";
 import { addSubagentRunForTests, getSubagentRunByRunId } from "./subagent-registry.test-helpers.js";
 
 const fixture = useSubagentControlFixture();
@@ -15,6 +18,13 @@ const fixture = useSubagentControlFixture();
 it.each([
   { name: "matching current", recorded: "original", current: "original", killed: true },
   { name: "conflicting current", recorded: "stale", current: "original", killed: false },
+  {
+    name: "missing current with its original execution still running",
+    recorded: "original",
+    current: "original",
+    removeCurrent: true,
+    killed: true,
+  },
   {
     name: "matching expected despite a newer current session",
     recorded: "original",
@@ -41,7 +51,7 @@ it.each([
   },
 ])(
   "checks legacy Stop identity: $name",
-  async ({ recorded, current, expected, expectedKey, killed }) => {
+  async ({ recorded, current, removeCurrent, expected, expectedKey, killed }) => {
     const sessionKey = "agent:main:subagent:legacy-stop";
     const runId = "legacy-stop";
     const storePath = await writeSubagentSessionEntry({
@@ -50,6 +60,13 @@ it.each([
       sessionKey,
       defaultSessionId: current,
     });
+    if (removeCurrent) {
+      await removeSubagentSessionEntry({
+        stateDir: fixture.stateDir,
+        agentId: "main",
+        sessionKey,
+      });
+    }
     await addSubagentRunForTests({
       runId,
       childSessionKey: sessionKey,

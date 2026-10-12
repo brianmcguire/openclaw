@@ -188,6 +188,30 @@ for (const { name, fault, replaceParent } of [
             sessionKey: sessionKey(runId),
             defaultSessionId: `${runId}-session`,
           });
+          if (running.includes(runId)) {
+            // Recovery must observe the live owner when the run is registered.
+            leases.push(
+              await beginSessionWorkAdmission({
+                scope: storePath,
+                identities: [sessionKey(runId), `${runId}-session`],
+                run: {
+                  runId,
+                  sessionKey: sessionKey(runId),
+                  sessionId: `${runId}-session`,
+                  agentId: "main",
+                },
+                assertAllowed: () => {},
+                onInterrupt: () => {
+                  interrupted.push(runId);
+                  firstInterrupted.resolve();
+                  slotReleaseResults.push(releaseSwarmRun(runId));
+                  if (runId === failedRunId) {
+                    throw new Error("synthetic sibling interruption failure");
+                  }
+                },
+              }),
+            );
+          }
           if (queued.includes(runId)) {
             expect(
               reserveSwarmRun({ groupId, runId, maxConcurrent: 8, activeRunIds: running }),
@@ -228,27 +252,6 @@ for (const { name, fault, replaceParent } of [
         }
         for (const runId of running) {
           expect(isSwarmRunActive(runId)).toBe(true);
-          leases.push(
-            await beginSessionWorkAdmission({
-              scope: storePath,
-              identities: [sessionKey(runId), `${runId}-session`],
-              run: {
-                runId,
-                sessionKey: sessionKey(runId),
-                sessionId: `${runId}-session`,
-                agentId: "main",
-              },
-              assertAllowed: () => {},
-              onInterrupt: () => {
-                interrupted.push(runId);
-                firstInterrupted.resolve();
-                slotReleaseResults.push(releaseSwarmRun(runId));
-                if (runId === failedRunId) {
-                  throw new Error("synthetic sibling interruption failure");
-                }
-              },
-            }),
-          );
         }
         for (const runId of queued) {
           expect(
