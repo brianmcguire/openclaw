@@ -498,6 +498,7 @@ export class ManagedWorktreeService {
           { ...current, retainSources: params.retainSources, prepareBase: params.prepareBase },
           repository,
           destination,
+          publication.id,
         );
         prepared = true;
         return created;
@@ -573,6 +574,7 @@ export class ManagedWorktreeService {
     params: RepositoryCreationParams,
     repository: ResolvedRepository,
     destination: Awaited<ReturnType<typeof prepareWorktreeDestination>>,
+    worktreeId: string,
   ): Promise<MaterializedRepositoryWorktree> {
     const { root, worktreePath, branch } = destination;
     // Default-base resolution fetches remote refs; it is an effect, not just discovery.
@@ -648,7 +650,7 @@ export class ManagedWorktreeService {
           ? {
               onPromptReady: async (commit: string) =>
                 onPromptReady({
-                  id: publication.id,
+                  id: worktreeId,
                   path: worktreePath,
                   branch,
                   repoRoot: repository.repoRoot,
