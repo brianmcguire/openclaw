@@ -18,9 +18,7 @@ import {
   hasTerminalMainSessionTranscriptNewerThanRegistryAsync,
   resolveSessionLifecycleTimestampsAsync,
 } from "../../config/sessions/lifecycle-read.js";
-import {
-  isRestartRecoveryTombstone,
-} from "../../config/sessions/lifecycle.js";
+import { isRestartRecoveryTombstone } from "../../config/sessions/lifecycle.js";
 import { deriveSessionMetaPatch } from "../../config/sessions/metadata.js";
 import {
   resolveChannelResetConfig,
