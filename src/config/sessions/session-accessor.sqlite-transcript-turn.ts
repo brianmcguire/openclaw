@@ -66,7 +66,7 @@ import { captureOwnedTranscriptWriteAssertion } from "./transcript-write-context
 /** Appends a guarded transcript turn and touches its session row in one queued write. */
 export async function appendExpectedSessionTranscriptTurn(
   scope: SessionTranscriptWriteScope,
-  requestedOptions: Omit<SqliteSessionTurnOptions, "ownerSource">,
+  requestedOptions: SqliteSessionTurnOptions,
   ownerScope: SessionTranscriptWriteScope = scope,
 ): Promise<SqliteExpectedSessionTranscriptTurnResult> {
   // Keep the admitted logical locator while the worker pins its physical database.
@@ -74,6 +74,9 @@ export async function appendExpectedSessionTranscriptTurn(
     ...ownerScope,
     sessionId: requestedOptions.expectedSessionId,
   });
+  if (requestedOptions.ownerSource) {
+    return appendPreparedSessionTranscriptTurn(scope, requestedOptions, assertOwnedWrite);
+  }
   const ownerSource = await prepareSessionSourceAuthority(assertOwnedWrite);
   const errors: unknown[] = [];
   try {

@@ -88,7 +88,7 @@ describe("transcript turn logical ownership", () => {
           await persistSessionTranscriptTurn(scope, options);
         }
         const before = await loadTranscriptEvents(scope);
-        const entryBefore = await loadSessionEntry(scope);
+        const entryBefore = loadSessionEntry(scope);
         let current = true;
         let committed = false;
         const turn = withOwnedSessionTranscriptWrites(
@@ -131,7 +131,7 @@ describe("transcript turn logical ownership", () => {
         await expect(turn).rejects.toThrow("original source authority revoked");
         expect(committed).toBe(false);
         expect(await loadTranscriptEvents(scope)).toEqual(before);
-        expect(await loadSessionEntry(scope)).toEqual(entryBefore);
+        expect(loadSessionEntry(scope)).toEqual(entryBefore);
       });
     },
   );
