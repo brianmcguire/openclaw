@@ -35,6 +35,7 @@ export const databaseWorkerCoreTestFiles = [
   "src/state/openclaw-agent-db.open-timing.test.ts",
   "src/state/openclaw-state-db-read-connection.cache.test.ts",
   "src/agents/auth-profiles.sqlite-read-pool.test.ts",
+  "src/agents/cli-auth-epoch.test.ts",
   "src/config/sessions/session-canonical-key-policy.test.ts",
   "src/config/sessions/session-canonical-key.test.ts",
   "src/config/sessions/session-canonical-reader-continuation.test.ts",
