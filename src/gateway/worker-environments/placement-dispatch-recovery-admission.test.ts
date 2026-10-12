@@ -388,6 +388,31 @@ describe("placement recovery session admission with persisted placements", () =>
     expect(harness.environments.destroy).toHaveBeenCalledOnce();
   });
 
+  it("does not start orphan discovery for sessions created after startup", async () => {
+    const placements = createStore();
+    const readChangeSnapshot = vi.spyOn(placements, "readChangeSnapshot");
+    const resolveWorkspace = vi.fn(async () => ({
+      kind: "local" as const,
+      path: support.testState.root,
+    }));
+    const harness = createHarness(support.testState.stateDb, placements, { resolveWorkspace });
+    const coordinated = coordinate(harness);
+    await coordinated.reconcile("startup");
+
+    const claim = await placements.claimTurn({
+      ...REQUEST,
+      owner: { kind: "local" },
+      claimId: "after-startup",
+      runId: "after-startup",
+    });
+    await placements.releaseTurnIfOwned(claim);
+    await coordinated.reconcileActive();
+    await coordinated.reconcileActive();
+
+    expect(readChangeSnapshot).not.toHaveBeenCalled();
+    expect(resolveWorkspace).not.toHaveBeenCalled();
+  });
+
   it("spreads startup orphan inventories across idle sweeps and eventually reclaims every checkout", async () => {
     const template = path.join(support.testState.root, "template");
     await fs.mkdir(template);
