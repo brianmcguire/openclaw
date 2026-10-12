@@ -22,12 +22,13 @@ import {
   runOpenClawAgentWriteTransaction,
 } from "../../state/openclaw-agent-db.js";
 import { createOpenClawDatabaseMaintenanceScope } from "../../state/openclaw-state-db-async-lifecycle.js";
-import { runMaintenance } from "../../state/openclaw-state-maintenance-context.js";
+import * as databaseMaintenance from "../../state/openclaw-state-db-async-lifecycle.js";
 import { loadSessionEntry } from "./session-accessor.js";
 import { writeSessionEntry } from "./session-accessor.sqlite-entry-store.js";
 import { importSqliteSessionRowsBatch } from "./session-accessor.sqlite-import.js";
 import * as ageFacts from "./session-accessor.sqlite-maintenance-age.js";
 import { kickSessionEntryMaintenanceAfterWrite } from "./session-accessor.sqlite-maintenance-kick.js";
+import * as maintenanceKick from "./session-accessor.sqlite-maintenance-kick.js";
 import * as reclamationRun from "./session-accessor.sqlite-reclamation-run.js";
 import { registerSessionMaintenancePreserveKeysProvider } from "./store-maintenance-preserve.js";
 import {
@@ -61,13 +62,23 @@ function createStore(pruneAfterMs = 1_000, key = sessionKey, { workerMaintenance
       });
   if (maintenance) {
     maintenanceScopes.push(maintenance);
+    const kick = maintenanceKick.kickSessionEntryMaintenanceAfterWrite;
+    vi.spyOn(maintenanceKick, "kickSessionEntryMaintenanceAfterWrite").mockImplementation(
+      (request) => maintenance.run(() => kick(request)),
+    );
+    const captureResource = databaseMaintenance.captureOpenClawDatabaseMaintenanceResource;
+    vi.spyOn(databaseMaintenance, "captureOpenClawDatabaseMaintenanceResource").mockImplementation(
+      (resource, scope) => {
+        const captured = captureResource(resource, scope);
+        // Keep the scheduling owner and its callbacks on the same fake-clock execution path.
+        return scope === maintenance ? { ...captured, runWorker: captured.run } : captured;
+      },
+    );
   }
   const runReclamation = reclamationRun.runSqliteSessionReclamation;
   const archived = createDeferred();
   vi.spyOn(reclamationRun, "runSqliteSessionReclamation").mockImplementation((params) => {
-    const result = maintenance
-      ? runMaintenance(maintenance, () => runReclamation(params), false)
-      : runReclamation(params);
+    const result = runReclamation(params);
     // Observe publication without consuming the fault probes' original rejections.
     void result.then(
       (value) => {
