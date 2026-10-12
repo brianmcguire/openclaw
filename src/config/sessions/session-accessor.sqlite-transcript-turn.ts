@@ -66,10 +66,12 @@ import { captureOwnedTranscriptWriteAssertion } from "./transcript-write-context
 /** Appends a guarded transcript turn and touches its session row in one queued write. */
 export async function appendExpectedSessionTranscriptTurn(
   scope: SessionTranscriptWriteScope,
-  requestedOptions: SqliteSessionTurnOptions,
+  requestedOptions: Omit<SqliteSessionTurnOptions, "ownerSource">,
+  ownerScope: SessionTranscriptWriteScope = scope,
 ): Promise<SqliteExpectedSessionTranscriptTurnResult> {
+  // Keep the admitted logical locator while the worker pins its physical database.
   const assertOwnedWrite = captureOwnedTranscriptWriteAssertion({
-    ...scope,
+    ...ownerScope,
     sessionId: requestedOptions.expectedSessionId,
   });
   const ownerSource = await prepareSessionSourceAuthority(assertOwnedWrite);
@@ -153,6 +155,7 @@ async function appendPreparedSessionTranscriptTurn(
     !nativeReservation &&
     independentPreparation &&
     !options.ownerSource?.nativeSource &&
+    !options.ownerSource?.hasOpaqueCheck &&
     isMainThread &&
     (inputActor ||
       incognito ||
@@ -179,6 +182,11 @@ async function appendPreparedSessionTranscriptTurn(
   }
   if (incognito || inputActor) {
     throw new Error("Actor transcript turns require preparation outside the transaction");
+  }
+  if (options.ownerSource?.checks.length) {
+    throw new Error(
+      "Prepared transcript owner authority requires worker-compatible message preparation",
+    );
   }
   const assertRequestedCurrent = options.assertCurrent;
   options = {

@@ -441,9 +441,12 @@ it.each(visibleCompletions)(
         expect(reply).toHaveBeenCalledOnce();
         expect(reply.mock.calls[0]?.[0]).toMatchObject({
           From: "heartbeat",
-          To: undefined,
-          OriginatingChannel: undefined,
-          OriginatingTo: undefined,
+          To: publishes ? scenario.sessionKey : undefined,
+          OriginatingChannel: publishes ? "webchat" : undefined,
+          OriginatingTo: publishes ? scenario.sessionKey : undefined,
+        });
+        expect(reply.mock.calls[0]?.[1]).toMatchObject({
+          requireExplicitMessageTarget: !publishes,
         });
         expect(peekSystemEventEntries(scenario.sessionKey)).toEqual([]);
         const messages = await readProjectionMessages(scenario);
