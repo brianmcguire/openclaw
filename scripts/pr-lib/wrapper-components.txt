@@ -1978,6 +1978,7 @@ src/config/sessions/session-transcript-projection-rebuild.ts
 src/config/sessions/session-transcript-read-bytes.ts
 src/config/sessions/session-transcript-worker.types.ts
 src/config/sessions/transcript-assistant-delivery-read.ts
+src/config/sessions/transcript-entry-anchor.ts
 src/config/sessions/transcript-header.ts
 src/config/sessions/transcript-message-identity.ts
 src/config/sessions/transcript-navigation-fields.ts
