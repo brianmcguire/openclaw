@@ -1,6 +1,7 @@
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ModelCatalogEntry } from "../../agents/model-catalog.js";
 import { clearFollowupQueue, getFollowupQueue } from "../../auto-reply/reply/queue/state.js";
+import { setRuntimeConfigSnapshot } from "../../config/io.js";
 import {
   loadSessionEntry,
   upsertSessionEntryCore,
@@ -217,6 +218,7 @@ afterEach(() => {
 
 beforeEach(() => {
   cfg = structuredClone(defaultConfig);
+  setRuntimeConfigSnapshot(cfg);
   runtimeChoice.prepare.mockReset().mockImplementation(async (input) => ({
     kind: "ready",
     runtimeId: input.runtimeId ?? "openclaw",
