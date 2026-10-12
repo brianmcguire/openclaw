@@ -2,7 +2,7 @@ import { statSync } from "node:fs";
 import fs from "node:fs/promises";
 import path from "node:path";
 import { isRecord } from "@openclaw/normalization-core/record-coerce";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   awaitGateBeforeSettlement,
   createDeferred,
@@ -12,7 +12,6 @@ import {
   observeHostDataSql,
   trackSqliteStatementExecutions,
 } from "../../../test/helpers/sqlite-statement-execution-counter.js";
-import { createTempDirTracker } from "../../../test/helpers/temp-dir.js";
 import type {
   AgentHarness,
   AgentHarnessSessionDeletionParams,
@@ -38,17 +37,13 @@ import { onSessionIdentityMutation } from "../../sessions/session-lifecycle-even
 import * as personalPublicationLifecycle from "../../state/github-personal-publication-lifecycle.js";
 import {
   closeOpenClawAgentDatabasesAsync,
-  closeOpenClawAgentDatabasesForTest,
   openOpenClawAgentDatabase,
 } from "../../state/openclaw-agent-db.js";
 import { createOpenClawDatabaseMaintenanceScope } from "../../state/openclaw-state-db-async-lifecycle.js";
-import {
-  closeOpenClawStateDatabaseAsync,
-  closeOpenClawStateDatabaseForTest,
-} from "../../state/openclaw-state-db.js";
 import { resolveOpenClawStateSqlitePath } from "../../state/openclaw-state-db.paths.js";
 import { createSessionRepositoryWorkspaceStore } from "../../state/session-repository-workspaces.js";
 import { withOpenClawTestState } from "../../test-utils/openclaw-test-state.js";
+import { useSessionStoreTempDirs } from "../../test-utils/session-state-cleanup.js";
 import { normalizeSessionDeliveryState } from "../../utils/delivery-context.shared.js";
 import {
   applySessionEntryLifecycleMutation,
@@ -70,9 +65,10 @@ import { resolveSqliteScope } from "./session-accessor.sqlite-scope.js";
 import { replaceTranscriptEventsSync } from "./session-accessor.sqlite-transcript-write.test-support.js";
 import { resolveSqliteTargetFromSessionStorePath } from "./session-sqlite-target.js";
 
-const tempDirs = createTempDirTracker();
+const tempDirs = useSessionStoreTempDirs(afterAll, "openclaw-session-deletion-");
 
 describe("session deletion and native owner state", () => {
+  let tempDir: string;
   let storePath: string;
   const sessionKey = "agent:main:cron:cleanup:run:session";
   const baseKey = "agent:main:cron:cleanup";
@@ -80,20 +76,20 @@ describe("session deletion and native owner state", () => {
   let bindings: Map<string, string>;
 
   beforeEach(() => {
-    const tempDir = tempDirs.make("openclaw-session-deletion-");
+    tempDir = tempDirs.make();
     vi.stubEnv("OPENCLAW_STATE_DIR", tempDir);
     storePath = path.join(tempDir, "agents", "main", "sessions", "sessions.json");
     bindings = new Map();
   });
 
   afterEach(async () => {
-    vi.restoreAllMocks();
-    await closeOpenClawAgentDatabasesAsync();
-    await closeOpenClawStateDatabaseAsync();
-    closeOpenClawAgentDatabasesForTest();
-    closeOpenClawStateDatabaseForTest();
-    tempDirs.cleanup();
-    vi.unstubAllEnvs();
+    try {
+      // Retire scheduled maintenance before the next case changes its environment.
+      await closeOpenClawAgentDatabasesAsync(tempDir);
+    } finally {
+      vi.restoreAllMocks();
+      vi.unstubAllEnvs();
+    }
   });
 
   function nativeOwner(

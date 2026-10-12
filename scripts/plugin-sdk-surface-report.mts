@@ -243,8 +243,9 @@ export function readPluginSdkSurfaceBudgets(env: NodeJS.ProcessEnv = process.env
       // +1: preview adapters strip only normalization-owned response decoration.
       // +1: shared stale-read cache replaces board, preview, search, and credential cache policies.
       // +2: approved async transcript event/stat read replacements.
+      // +1: approved PreparedAgentRunStart contract.
       // +1: deprecated createSessionHeaderLink retained from shipped 2026.10.1.
-      3699,
+      3700,
       env,
     ),
     publicFunctionExports: readPluginSdkSurfaceBudgetEnv(

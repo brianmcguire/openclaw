@@ -18,7 +18,7 @@ import {
   waitForSessionTranscriptIndexReconcile,
 } from "../config/sessions/session-transcript-reconcile.js";
 import { searchSessionTranscripts } from "../config/sessions/session-transcript-search.js";
-import { readSessionTranscriptStats as readTranscriptStatsAsync } from "../config/sessions/session-transcript-stats.js";
+import { readTranscriptStatsAsync } from "../config/sessions/session-transcript-stats.js";
 import { readSessionTranscriptWatermarkAsync } from "../config/sessions/session-transcript-watermark.js";
 import { readRecentUserAssistantTextForSession } from "../config/sessions/transcript.js";
 import * as cronJobNames from "../cron/store/job-name.js";

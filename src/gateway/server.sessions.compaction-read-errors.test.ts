@@ -18,7 +18,7 @@ vi.hoisted(() => {
 });
 
 type ReadTranscriptStats =
-  (typeof import("../config/sessions/session-transcript-stats.js"))["readSessionTranscriptStats"];
+  (typeof import("../config/sessions/session-transcript-stats.js"))["readTranscriptStatsAsync"];
 
 const transcriptReads = vi.hoisted(() => ({
   stats: vi.fn<ReadTranscriptStats>(),
@@ -29,7 +29,7 @@ vi.mock("../config/sessions/session-transcript-stats.js", async (importOriginal)
     await importOriginal<typeof import("../config/sessions/session-transcript-stats.js")>();
   return {
     ...actual,
-    readSessionTranscriptStats: transcriptReads.stats,
+    readTranscriptStatsAsync: transcriptReads.stats,
   };
 });
 
@@ -42,7 +42,7 @@ beforeEach(async () => {
   const actual = await vi.importActual<
     typeof import("../config/sessions/session-transcript-stats.js")
   >("../config/sessions/session-transcript-stats.js");
-  realTranscriptStatsReader = actual.readSessionTranscriptStats;
+  realTranscriptStatsReader = actual.readTranscriptStatsAsync;
   transcriptReads.stats.mockImplementation(realTranscriptStatsReader);
 });
 
