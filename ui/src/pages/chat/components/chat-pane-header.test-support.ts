@@ -26,6 +26,7 @@ export function mountChatPaneHeader(
   containers.push(container);
   const props: ChatPaneHeaderProps = {
     paneId: "pane-1",
+    presented: true,
     narrow: false,
     mergedChrome: false,
     title: "Session title",

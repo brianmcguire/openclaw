@@ -31,6 +31,7 @@ import {
   resolveUiSessionNavigationParentKey,
 } from "../../../lib/sessions/session-key.ts";
 import { nativeListener } from "../../../lib/solid-native-listener.ts";
+import { presentedContent, type PresentationValue } from "../../../lit/presentation-binding.ts";
 import { LitContent, solidContent, emptyLegacyContent } from "../../../lit/solid-content.tsx";
 import { ChatPaneLayoutMenu, type ChatPaneLayoutMenuProps } from "./chat-header-panel-actions.tsx";
 import { ChatPaneVersionsMenu } from "./chat-pane-versions-menu.tsx";
@@ -43,6 +44,7 @@ type ChatPaneParentSession = {
 };
 
 export type ChatPaneHeaderProps = ChatPaneLayoutMenuProps & {
+  presented: PresentationValue;
   mergedChrome: boolean;
   navDrawerOpen?: boolean;
   title: string;
@@ -391,14 +393,18 @@ export function ChatPaneHeader(props: ChatPaneHeaderProps) {
       </div>
       <div class="chat-pane__header-trailing">
         <LitContent value={props.detailsControl} />
-        <ChatPaneVersionsMenu
-          menu={{
-            catalog: props.catalog,
-            paneId: props.paneId,
-            branches: props.branches,
-            branchSwitchDisabledReason: props.branchSwitchDisabledReason,
-            onBranchSelect: props.onBranchSelect,
-          }}
+        <LitContent
+          value={presentedContent(
+            props.presented,
+            solidContent(ChatPaneVersionsMenu, {
+              menu: {
+                catalog: props.catalog,
+                branches: props.branches,
+                branchSwitchDisabledReason: props.branchSwitchDisabledReason,
+                onBranchSelect: props.onBranchSelect,
+              },
+            }),
+          )}
         />
         <div class="chat-pane__actions">
           <Show when={!props.narrow}>
