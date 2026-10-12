@@ -1,4 +1,6 @@
+import assert from "node:assert/strict";
 import type { AgentHarnessCompletionCustody } from "openclaw/plugin-sdk/agent-harness-completion";
+import { createDeferred } from "openclaw/plugin-sdk/extension-shared";
 import { resetPluginStateStoreForTests } from "openclaw/plugin-sdk/plugin-state-test-runtime";
 import { closeOpenClawStateDatabaseAsync } from "openclaw/plugin-sdk/sqlite-runtime-testing";
 import { useAutoCleanupTempDirTracker } from "openclaw/plugin-sdk/test-env";
@@ -10,10 +12,15 @@ import {
 import {
   CodexNativeSubagentMonitor,
   createClient,
+  createNativeModelSourceFixture,
   createRuntime,
   createCompletionScope,
   childTurnCompletedNotification,
+  directSpawnItem,
+  notifyChildStarted,
+  successfulSendInputOutput,
   threadRead,
+  turnStartedNotification,
 } from "./native-subagent-monitor.test-support.js";
 import type { CodexNativeSubagentAssignmentStore } from "./native-subagent-pending-assignments.js";
 import type {
@@ -97,23 +104,20 @@ describe("native subagent submission receipts in the binding store", () => {
   it.each(["receipt", "assignment"] as const)(
     "Stop preserves recovery across a rejected %s acknowledgement and consumes it on retry",
     async (rejectedOwner) => {
-      const f = await fixture(receipt);
+      const f = await fixture();
       let store = f.store;
       const { root, owner } = f;
+      const stopReceipt = { ...receipt, predecessorRunId: "codex-thread:child-thread" };
       const assignment = {
         runId: "codex-thread:child-thread:turn:child-turn-b",
-        childThreadId: receipt.childThreadId,
-        nativeTurnId: receipt.submissionId,
+        childThreadId: stopReceipt.childThreadId,
+        nativeTurnId: stopReceipt.submissionId,
         nativeParentThreadId: binding.threadId,
         owner,
-        submission: receipt,
       };
-      await store.mutate(
-        identity,
-        { kind: "record-native-subagent-assignment", owner, assignment },
-        currentAuthority,
-      );
-      let reject = true;
+      const assignmentRecorded = createDeferred<boolean>();
+      const receiptRecorded = createDeferred<boolean>();
+      let reject = false;
       const assertCurrent = () => {
         if (store.read(identity)?.threadId !== binding.threadId) {
           throw new Error("Cancellation binding changed");
@@ -121,13 +125,18 @@ describe("native subagent submission receipts in the binding store", () => {
       };
       const assignmentStore: CodexNativeSubagentAssignmentStore = {
         assertCurrent,
-        read: () => store.readNativeSubagentAssignments?.(identity, owner) ?? [],
-        record: (value, guard) =>
-          store.mutate(
+        read: () => store.readNativeSubagentAssignments?.(identity, owner) ?? Promise.resolve([]),
+        record: (value, guard) => {
+          const recorded = store.mutate(
             identity,
             { kind: "record-native-subagent-assignment", owner, assignment: value },
             guard,
-          ),
+          );
+          if (value.runId === assignment.runId && !value.submission) {
+            assignmentRecorded.resolve(recorded);
+          }
+          return recorded;
+        },
         consume: (value, guard) =>
           reject && rejectedOwner === "assignment"
             ? Promise.resolve(false)
@@ -149,18 +158,25 @@ describe("native subagent submission receipts in the binding store", () => {
       const submissionStore: CodexNativeSubagentSubmissionStore = {
         assertCurrent,
         read: () => store.readNativeSubagentSubmissions(identity, owner),
-        record: (value, guard) =>
-          store.mutate(
+        record: (value, guard) => {
+          const recorded = store.mutate(
             identity,
             { kind: "record-native-subagent-submission", owner, receipt: value },
             guard,
-          ),
+          );
+          receiptRecorded.resolve(recorded);
+          return recorded;
+        },
         consume: consumeReceipt,
       };
       const client = createClient();
       client.setThreadRead(
-        receipt.childThreadId,
-        threadRead({ turnId: receipt.submissionId, status: "inProgress", threadStatus: "active" }),
+        stopReceipt.childThreadId,
+        threadRead({
+          turnId: stopReceipt.predecessorNativeTurnId,
+          status: "inProgress",
+          threadStatus: "active",
+        }),
       );
       const runtime = createRuntime();
       const custody: AgentHarnessCompletionCustody = {
@@ -171,10 +187,14 @@ describe("native subagent submission receipts in the binding store", () => {
         release() {},
       };
       runtime.captureAgentHarnessCompletionCustody.mockResolvedValue(custody);
-      const interrupt = vi.fn(async (_threadId: string, _turnId: string, guard: () => void) => {
+      const interrupt = vi.fn(async (threadId: string, turnId: string, guard: () => void) => {
         guard();
+        expect([threadId, turnId]).toEqual([stopReceipt.childThreadId, stopReceipt.submissionId]);
         await client.notify(
-          childTurnCompletedNotification({ turnId: receipt.submissionId, status: "interrupted" }),
+          childTurnCompletedNotification({
+            turnId: stopReceipt.submissionId,
+            status: "interrupted",
+          }),
         );
         return true;
       });
@@ -182,13 +202,23 @@ describe("native subagent submission receipts in the binding store", () => {
         recoveryPollDelaysMs: [],
         interruptChildAndWait: interrupt,
       });
+      const completionScope = createCompletionScope(identity.sessionKey);
+      const requestCustody = Object.freeze({});
+      const modelSource = createNativeModelSourceFixture(["test-model"]);
       const parent = await monitor.registerParent({
         parentThreadId: binding.threadId,
         requesterSessionKey: identity.sessionKey,
         requesterTurnRunId: "parent-run",
+        requestCustody,
         agentId: identity.agentId,
         historyOwner: owner,
-        completionScope: createCompletionScope(identity.sessionKey),
+        completionScope,
+        modelSource,
+        configurationQualification: {
+          assertCurrent: modelSource.assertCurrent,
+          hasProvider: (provider) => provider === "test-provider",
+        },
+        claimDirectChild: () => () => {},
         assignmentStore,
         submissionStore,
       });
@@ -200,7 +230,7 @@ describe("native subagent submission receipts in the binding store", () => {
             sessionKey: identity.sessionKey,
             sessionId: identity.sessionId,
             lifecycleRevision: owner.lifecycleRevision,
-            acceptsRequest: () => true,
+            acceptsRequest: (acceptedCustody) => acceptedCustody === requestCustody,
             assertCurrent,
           },
           (cancel) => cancel(),
@@ -211,19 +241,122 @@ describe("native subagent submission receipts in the binding store", () => {
         store = createLazyCodexAppServerBindingStore(openState(root));
       };
       try {
+        await parent.ready;
+        parent.bindTurn(stopReceipt.parentTurnId);
+        await notifyChildStarted(client);
+        await client.notify({
+          method: "item/completed",
+          params: {
+            threadId: binding.threadId,
+            turnId: stopReceipt.parentTurnId,
+            item: directSpawnItem("v1", binding.threadId, stopReceipt.childThreadId),
+          },
+        });
+        await client.notify(turnStartedNotification(stopReceipt.predecessorNativeTurnId));
+        await client.notify(
+          childTurnCompletedNotification({
+            turnId: stopReceipt.predecessorNativeTurnId,
+            status: "completed",
+            items: [
+              { id: "a-final", type: "agentMessage", phase: "final_answer", text: "A result" },
+            ],
+          }),
+        );
+        await client.notify({
+          method: "item/completed",
+          params: {
+            threadId: binding.threadId,
+            turnId: stopReceipt.parentTurnId,
+            item: {
+              id: "wait-a",
+              type: "collabAgentToolCall",
+              tool: "wait",
+              status: "completed",
+              senderThreadId: binding.threadId,
+              receiverThreadIds: [stopReceipt.childThreadId],
+              agentsStates: {
+                [stopReceipt.childThreadId]: { status: "completed", message: "A result" },
+              },
+            },
+          },
+        });
+        const predecessor = threadRead({
+          turnId: stopReceipt.predecessorNativeTurnId,
+          result: "A result",
+          resultPhase: "final_answer",
+          threadStatus: "notLoaded",
+        });
+        predecessor.thread.modelProvider = "test-provider";
+        client.setThreadRead(stopReceipt.childThreadId, predecessor);
+        await monitor.prepareModelInput({
+          threadId: binding.threadId,
+          turnId: stopReceipt.parentTurnId,
+          itemId: stopReceipt.callId,
+          target: stopReceipt.childThreadId,
+          readQualification: () => undefined,
+          assertCurrent,
+        });
+        const history = threadRead({
+          turnId: stopReceipt.submissionId,
+          status: "inProgress",
+          threadStatus: "active",
+        });
+        assert(history.thread.turns && predecessor.thread.turns);
+        history.thread.turns.unshift(...predecessor.thread.turns);
+        history.thread.modelProvider = "test-provider";
+        client.setThreadRead(stopReceipt.childThreadId, history);
+        await client.notify({
+          method: "item/completed",
+          params: {
+            threadId: binding.threadId,
+            turnId: stopReceipt.parentTurnId,
+            item: {
+              id: stopReceipt.callId,
+              type: "collabAgentToolCall",
+              tool: "sendInput",
+              status: "completed",
+              senderThreadId: binding.threadId,
+              receiverThreadIds: [stopReceipt.childThreadId],
+            },
+          },
+        });
+        await client.notify(
+          successfulSendInputOutput({
+            parentThreadId: binding.threadId,
+            turnId: stopReceipt.parentTurnId,
+            callId: stopReceipt.callId,
+            submissionId: stopReceipt.submissionId,
+          }),
+        );
+        await client.notify(turnStartedNotification(stopReceipt.submissionId));
+        expect(await assignmentRecorded.promise).toBe(true);
+        expect(await receiptRecorded.promise).toBe(true);
+        expect(await assignmentStore.read()).toEqual([assignment]);
+        expect(await submissionStore.read()).toEqual([stopReceipt]);
+        reject = true;
         const failed = await stop();
         expect(failed.killed).toBe(0);
-        expect(failed.errors).toHaveLength(1);
+        expect(failed.errors).toEqual([
+          new Error(
+            rejectedOwner === "receipt"
+              ? "Cancelled native follow-up receipt was not acknowledged."
+              : "Cancelled native assignment was not acknowledged.",
+          ),
+        ]);
         await reopen();
-        expect(assignmentStore.read()).toHaveLength(1);
-        expect(submissionStore.read()).toEqual(rejectedOwner === "receipt" ? [receipt] : []);
+        expect(await assignmentStore.read()).toEqual([assignment]);
+        expect(await submissionStore.read()).toEqual(
+          rejectedOwner === "receipt" ? [stopReceipt] : [],
+        );
         reject = false;
-        expect(await stop()).toMatchObject({ killed: 1 });
+        const retried = await stop();
+        expect(retried.killed).toBe(1);
+        expect(retried.errors).toBeUndefined();
         expect(interrupt).toHaveBeenCalledOnce();
         expect(consumeReceipt).toHaveBeenCalledTimes(rejectedOwner === "receipt" ? 2 : 1);
         await reopen();
-        expect(assignmentStore.read()).toEqual([]);
-        expect(submissionStore.read()).toEqual([]);
+        expect(await assignmentStore.read()).toEqual([]);
+        expect(await submissionStore.read()).toEqual([]);
         expect(runtime.deliverAgentHarnessCompletion).not.toHaveBeenCalled();
       } finally {
         await parent.unregister();
