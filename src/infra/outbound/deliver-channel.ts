@@ -226,12 +226,21 @@ function createPluginHandler(
     send: () => Promise<T>,
   ): Promise<T> => {
     await params.onPlatformSendStart?.(route);
-    await params.onDirectAdapterHandoff?.();
+    let preparationFailure: { error: unknown } | undefined;
+    try {
+      await params.onDirectAdapterHandoff?.();
+    } catch (error) {
+      preparationFailure = { error };
+    }
     // Keep the final authority check and adapter invocation in one synchronous
     // call stack. An awaited callback leaves a microtask gap where custody can
     // change after validation but before recipient-visible transport code runs.
     const initiate = () => {
       assertOutboundHandoffCurrent(params.assertDirectAdapterHandoff);
+      // Retirement is terminal even when preparation failed before reaching this handoff.
+      if (preparationFailure) {
+        throw preparationFailure.error;
+      }
       return send();
     };
     return params.withDirectAdapterHandoff
