@@ -7,7 +7,7 @@ import {
 } from "../../agent-steering-queue.js";
 import { captureGatewayToolCallerAssertion } from "../../tools/gateway-caller-context.js";
 import { prepareRequesterCronAuthority } from "../requester-cron-authority.js";
-import { resolveSubagentRequesterAgentId } from "./subagent-child-owner-match.js";
+import { resolveRecordedRequester } from "./subagent-child-owner-match.js";
 import type { SubagentLifecycleController } from "./subagent-registry-lifecycle.js";
 import { getSubagentRunsForChildSession } from "./subagent-registry-memory.js";
 import {
@@ -274,7 +274,7 @@ export function createSubagentRegistryPublicApi(config: {
               entry.swarmLaunchReplayKey === key &&
               (!requesterKey ||
                 (entry.swarmRequesterSessionKey ?? entry.requesterSessionKey) === requesterKey) &&
-              (!requesterAgentId || resolveSubagentRequesterAgentId(entry) === requesterAgentId),
+              (!requesterAgentId || resolveRecordedRequester(entry) === requesterAgentId),
           )
           .map((entry) => entry.runId),
         sessionKeys: [],

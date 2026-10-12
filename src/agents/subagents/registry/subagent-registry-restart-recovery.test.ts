@@ -507,6 +507,7 @@ describe("interrupted requester-settle continuation ownership", () => {
       requesterAgentId: "main",
       requesterStorePath: "/tmp/openclaw-subagent-recovery/agents/main/agent/openclaw-agent.sqlite",
       completionRequesterSessionId: "session-id",
+      completionRequesterLifecycleRevision: "session-revision",
       expectsCompletionMessage: !quiet,
       completionTarget: quiet ? "parent" : undefined,
       execution: {

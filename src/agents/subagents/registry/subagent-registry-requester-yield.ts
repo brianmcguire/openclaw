@@ -8,7 +8,7 @@ import {
   type PreparedRequesterCronAuthority,
 } from "../requester-cron-authority.js";
 import { promoteRequesterFinalAttachment } from "../requester-final-attachment.js";
-import { resolveSubagentRequesterAgentId } from "./subagent-child-owner-match.js";
+import { resolveRecordedRequester } from "./subagent-child-owner-match.js";
 import { trackSubagentProgressYield } from "./subagent-progress-draft.js";
 import { ANNOUNCE_COMPLETION_HARD_EXPIRY_MS } from "./subagent-registry-helpers.js";
 import {
@@ -53,7 +53,7 @@ export async function adoptSubagentRunForRequesterTurnInRuns(params: {
           requesterTurnRunId.length > 0 &&
           isSameSubagentRunOwner(entry, params.expected) &&
           entry.requesterSessionKey === params.requesterSessionKey &&
-          resolveSubagentRequesterAgentId(entry) === params.requesterAgentId &&
+          resolveRecordedRequester(entry) === params.requesterAgentId &&
           (!entry.requesterTurnRunId || entry.requesterTurnRunId === requesterTurnRunId) &&
           entry.expectsCompletionMessage === true &&
           entry.collect !== true &&
@@ -154,8 +154,7 @@ export function listUnsettledRequesterChildrenInRuns(params: {
   for (const entry of params.runs.values()) {
     if (
       entry.requesterSessionKey === requesterSessionKey &&
-      (!params.requesterAgentId ||
-        resolveSubagentRequesterAgentId(entry) === params.requesterAgentId)
+      (!params.requesterAgentId || resolveRecordedRequester(entry) === params.requesterAgentId)
     ) {
       recordLatestSubagentRun(latestByChildSessionKey, entry.childSessionKey, entry);
     }
@@ -227,7 +226,7 @@ export function selectRequesterTurnChildren(
     .filter(
       (entry) =>
         entry.requesterSessionKey === requesterSessionKey &&
-        (!requesterAgentId || resolveSubagentRequesterAgentId(entry) === requesterAgentId) &&
+        (!requesterAgentId || resolveRecordedRequester(entry) === requesterAgentId) &&
         entry.requesterTurnRunId === requesterTurnRunId &&
         entry.expectsCompletionMessage === true,
     )

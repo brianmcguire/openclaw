@@ -27,7 +27,7 @@ export function resolveSubagentChildAgentId(entry: {
   return owner.ok && (!keyOwner || keyOwner === owner.value) ? owner.value : undefined;
 }
 
-export function resolveSubagentRequesterAgentId(entry: {
+export function resolveRecordedRequester(entry: {
   requesterSessionKey: string;
   requesterAgentId?: string;
 }): string | undefined {

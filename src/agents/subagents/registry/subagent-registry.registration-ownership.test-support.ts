@@ -237,7 +237,7 @@ export function registerSubagentRegistrationOwnershipTests({
                 ownership = scope;
               },
             }),
-          ).rejects.toThrow("registry rows changed");
+          ).rejects.toThrow("Subagent registry row versions changed");
           const persisted = loadSubagentRegistryFromSqlite();
           expect(persisted.has("racing-global")).toBe(false);
           expect(persisted.get(unknown.runId)).toMatchObject({

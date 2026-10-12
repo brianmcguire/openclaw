@@ -1,7 +1,7 @@
 import { parseAgentSessionKey } from "../../../routing/session-key.js";
 import {
   matchesSubagentChildSessionOwner,
-  resolveSubagentRequesterAgentId,
+  resolveRecordedRequester,
 } from "./subagent-child-owner-match.js";
 import { isDeliverySuspended } from "./subagent-delivery-state.js";
 import {
@@ -81,7 +81,7 @@ export function listRunsForRequesterFromRuns(
       (!latestRuns ||
         latestRuns.getLatestSubagentRun(entry.childSessionKey, entry.childAgentId) === entry) &&
       (!options?.requesterAgentId ||
-        resolveSubagentRequesterAgentId(entry) === options.requesterAgentId) &&
+        resolveRecordedRequester(entry) === options.requesterAgentId) &&
       (options?.requesterStorePath === undefined ||
         (entry.requesterStorePath ?? null) === options.requesterStorePath) &&
       (typeof lowerBound !== "number" || entry.createdAt >= lowerBound) &&
@@ -491,7 +491,7 @@ export function listSwarmRunsForGroupFromRuns<T extends SubagentRunReadRecord>(
       entry.groupId === key &&
       (!requesterKey ||
         (entry.swarmRequesterSessionKey ?? entry.requesterSessionKey) === requesterKey) &&
-      (!requesterAgentId || resolveSubagentRequesterAgentId(entry) === requesterAgentId),
+      (!requesterAgentId || resolveRecordedRequester(entry) === requesterAgentId),
   );
 }
 
@@ -522,10 +522,7 @@ export function countActiveRunsForSessionFromRuns<T extends SubagentRunReadRecor
     if (ownerSessionKey !== key) {
       continue;
     }
-    if (
-      options?.requesterAgentId &&
-      resolveSubagentRequesterAgentId(entry) !== options.requesterAgentId
-    ) {
+    if (options?.requesterAgentId && resolveRecordedRequester(entry) !== options.requesterAgentId) {
       continue;
     }
     recordLatestSubagentRun(latestByChildSessionKey, entry.childSessionKey, entry);
@@ -562,7 +559,7 @@ function scopeRootDescendantsToRequesterAgent(
           ([, entry]) =>
             entry.requesterSessionKey !== rootSessionKey ||
             ((!rootRunIds || rootRunIds.has(entry.runId)) &&
-              (!requesterAgentId || resolveSubagentRequesterAgentId(entry) === requesterAgentId) &&
+              (!requesterAgentId || resolveRecordedRequester(entry) === requesterAgentId) &&
               (requesterStorePath === undefined ||
                 (entry.requesterStorePath ?? null) === requesterStorePath)),
         ),
