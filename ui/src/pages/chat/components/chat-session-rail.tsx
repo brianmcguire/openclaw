@@ -87,7 +87,7 @@ export function ChatSessionRailContent(props: ChatSessionRailProps) {
     return {
       uploadConfig: props.uploadConfig,
       attachments: companion.attachments,
-      getAttachments: () => companion.attachments ?? [],
+      getAttachments: () => props.companion.attachments ?? [],
       attachmentReads: reads,
       readSignal,
       attachmentLimits: props.attachmentLimits,
