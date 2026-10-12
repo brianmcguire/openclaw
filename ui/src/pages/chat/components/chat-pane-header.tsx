@@ -1,5 +1,6 @@
 import { Show } from "solid-js";
 import { buildControlUiResourcePath } from "../../../../../src/gateway/control-ui-resource-routes.js";
+import { isIncognitoSessionKey } from "../../../../../src/shared/incognito-session-key.js";
 import type { GatewaySessionRow, SessionBranch } from "../../../api/types.ts";
 import type { ApplicationContext } from "../../../app/context.ts";
 import { resolveControlUiAuthCandidates } from "../../../app/control-ui-auth.ts";
@@ -309,117 +310,136 @@ export function ChatPaneHeader(props: ChatPaneHeaderProps) {
   const drawerLabel = () => (props.navDrawerOpen ? t("nav.collapse") : t("nav.expand"));
   const hasSharingControl = () =>
     props.sharingControl !== undefined && props.sharingControl !== emptyLegacyContent;
+  const incognito = () =>
+    (props.incognito ?? props.session?.incognito) || isIncognitoSessionKey(props.session?.key);
 
   return (
-    <div
-      class={[
-        "chat-pane__header",
-        {
-          "chat-pane__header--closable": props.onClosePane !== undefined,
-          "chat-pane__header--stacked-status":
-            props.narrow && (props.runningSubagentCount ?? 0) > 0,
-        },
-      ]}
-      role="group"
-      aria-label={props.title}
-      tabindex={-1}
-      onMouseDown={beginNativeWindowDrag}
-    >
-      <div class="chat-pane__header-leading">
-        {props.mergedChrome ? (
-          <openclaw-tooltip prop:content={drawerLabel()}>
-            <button
-              class="btn btn--ghost btn--icon chat-icon-btn chat-pane__nav-toggle"
-              type="button"
-              aria-label={drawerLabel()}
-              aria-expanded={props.navDrawerOpen ? "true" : "false"}
-              onClick={(event) => {
-                window.dispatchEvent(
-                  new CustomEvent<ShellNavDrawerToggleDetail>(SHELL_NAV_DRAWER_TOGGLE_EVENT, {
-                    detail: {
-                      trigger: event.currentTarget,
-                    },
-                  }),
-                );
-              }}
+    <>
+      <div
+        class={[
+          "chat-pane__header",
+          {
+            "chat-pane__header--closable": props.onClosePane !== undefined,
+            "chat-pane__header--stacked-status":
+              props.narrow && (props.runningSubagentCount ?? 0) > 0,
+          },
+        ]}
+        role="group"
+        aria-label={props.title}
+        tabindex={-1}
+        onMouseDown={beginNativeWindowDrag}
+      >
+        <div class="chat-pane__header-leading">
+          {props.mergedChrome ? (
+            <openclaw-tooltip prop:content={drawerLabel()}>
+              <button
+                class="btn btn--ghost btn--icon chat-icon-btn chat-pane__nav-toggle"
+                type="button"
+                aria-label={drawerLabel()}
+                aria-expanded={props.navDrawerOpen ? "true" : "false"}
+                onClick={(event) => {
+                  window.dispatchEvent(
+                    new CustomEvent<ShellNavDrawerToggleDetail>(SHELL_NAV_DRAWER_TOGGLE_EVENT, {
+                      detail: {
+                        trigger: event.currentTarget,
+                      },
+                    }),
+                  );
+                }}
+              >
+                <Icon name="menu" />
+              </button>
+            </openclaw-tooltip>
+          ) : undefined}
+          <Show when={incognito()}>
+            <openclaw-tooltip
+              prop:content={t("sessionsView.incognitoDescription")}
+              placement="bottom"
+              prop:openOnClick={true}
             >
-              <Icon name="menu" />
-            </button>
-          </openclaw-tooltip>
-        ) : undefined}
-        {(props.incognito ?? props.session?.incognito) ? (
-          <span
-            class="chat-pane__incognito"
-            role="img"
-            aria-label={t("chat.sessionHeader.incognito")}
-            title={t("chat.sessionHeader.incognito")}
-          >
-            <Icon name="lock" />
-          </span>
-        ) : undefined}
-        <IdentityCrumbs {...props} /> <LitContent value={props.publicAccessIndicator} />
-        {hasSharingControl() ? undefined : (
+              <button type="button" class="chat-pane__incognito">
+                <span aria-hidden="true">
+                  <Icon name="incognito" />
+                </span>
+                {t("sessionsView.incognitoLabel")}
+              </button>
+            </openclaw-tooltip>
+          </Show>
+          <IdentityCrumbs {...props} /> <LitContent value={props.publicAccessIndicator} />
+          {hasSharingControl() ? undefined : (
+            <LitContent
+              value={renderStandalonePersonLink(
+                renderSessionOwnerChip(
+                  props.showOwnerChip ? props.session?.owner?.actor : undefined,
+                  "header",
+                  props.session?.owner?.assignedAt !== undefined ? "owned" : "created",
+                  props.ownerViewing,
+                ),
+                props.showOwnerChip
+                  ? personActivityLink(
+                      props.session?.owner?.actor.identity?.type === "profile"
+                        ? props.session.owner.actor.identity.id
+                        : undefined,
+                      props.personActivity,
+                      props.session?.owner?.actor.label,
+                    )
+                  : null,
+              )}
+            />
+          )}
+          {props.showOwnerChip && props.session?.participants?.length ? (
+            <openclaw-viewer-facepile
+              class="chat-pane__participants"
+              prop:staticParticipants={props.session.participants}
+              prop:totalCount={props.session.participantCount}
+              prop:maxVisible={4}
+              prop:personActivity={props.personActivity}
+              variant="session"
+            />
+          ) : undefined}
+          <LitContent value={props.placementControl} /> <LitContent value={props.presence} />
+        </div>
+        <div class="chat-pane__header-trailing">
+          <LitContent value={props.detailsControl} />
           <LitContent
-            value={renderStandalonePersonLink(
-              renderSessionOwnerChip(
-                props.showOwnerChip ? props.session?.owner?.actor : undefined,
-                "header",
-                props.session?.owner?.assignedAt !== undefined ? "owned" : "created",
-                props.ownerViewing,
-              ),
-              props.showOwnerChip
-                ? personActivityLink(
-                    props.session?.owner?.actor.identity?.type === "profile"
-                      ? props.session.owner.actor.identity.id
-                      : undefined,
-                    props.personActivity,
-                    props.session?.owner?.actor.label,
-                  )
-                : null,
+            value={presentedContent(
+              props.presented,
+              solidContent(ChatPaneVersionsMenu, {
+                menu: {
+                  catalog: props.catalog,
+                  branches: props.branches,
+                  branchSwitchDisabledReason: props.branchSwitchDisabledReason,
+                  onBranchSelect: props.onBranchSelect,
+                },
+              }),
             )}
           />
-        )}
-        {props.showOwnerChip && props.session?.participants?.length ? (
-          <openclaw-viewer-facepile
-            class="chat-pane__participants"
-            prop:staticParticipants={props.session.participants}
-            prop:totalCount={props.session.participantCount}
-            prop:maxVisible={4}
-            prop:personActivity={props.personActivity}
-            variant="session"
-          />
-        ) : undefined}
-        <LitContent value={props.placementControl} /> <LitContent value={props.presence} />
-      </div>
-      <div class="chat-pane__header-trailing">
-        <LitContent value={props.detailsControl} />
-        <LitContent
-          value={presentedContent(
-            props.presented,
-            solidContent(ChatPaneVersionsMenu, {
-              menu: {
-                catalog: props.catalog,
-                branches: props.branches,
-                branchSwitchDisabledReason: props.branchSwitchDisabledReason,
-                onBranchSelect: props.onBranchSelect,
-              },
-            }),
-          )}
-        />
-        <div class="chat-pane__actions">
-          <Show when={!props.narrow}>
-            <RunningSubagents count={props.runningSubagentCount} />
-          </Show>
-          <LitContent value={props.runAction} />
-          <LitContent value={props.sharingControl} />
-          <ChatPaneLayoutMenu {...props} />
-          <LitContent value={props.sessionMenuAction} />
+          <div class="chat-pane__actions">
+            <Show when={!props.narrow}>
+              <RunningSubagents count={props.runningSubagentCount} />
+            </Show>
+            <LitContent value={props.runAction} />
+            <LitContent value={props.sharingControl} />
+            <ChatPaneLayoutMenu {...props} />
+            <LitContent value={props.sessionMenuAction} />
+          </div>
         </div>
+        <Show when={props.narrow}>
+          <RunningSubagents count={props.runningSubagentCount} />
+        </Show>
       </div>
-      <Show when={props.narrow}>
-        <RunningSubagents count={props.runningSubagentCount} />
+      <Show when={incognito()}>
+        <aside class="chat-pane__incognito-notice" aria-label={t("sessionsView.incognitoLabel")}>
+          <span class="chat-pane__incognito-notice-icon" aria-hidden="true">
+            <Icon name="incognito" />
+          </span>
+          <div>
+            <p>{t("sessionsView.incognitoDescription")}</p>
+            <p class="chat-pane__incognito-limits">{t("sessionsView.incognitoLimits")}</p>
+          </div>
+        </aside>
       </Show>
-    </div>
+    </>
   );
 }
 

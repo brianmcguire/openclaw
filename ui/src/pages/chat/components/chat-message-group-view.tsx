@@ -216,6 +216,7 @@ function GroupAvatar(props: { frame: MessageGroupFrame }) {
                     }
                   : undefined,
                 frame().group.sender,
+                options().channelAvatar,
               )
         }
       />
@@ -460,7 +461,14 @@ function FramedMessageGroup(props: {
               {frame().normalizedRole === "user" &&
               frame().showAvatar &&
               frame().avatarPlacement === "footer" ? (
-                <LitContent value={renderChatAuthorAvatar(props.group.sender)} />
+                <LitContent
+                  value={renderChatAuthorAvatar(
+                    props.group.sender,
+                    "chat-author-avatar",
+                    undefined,
+                    options().channelAvatar,
+                  )}
+                />
               ) : undefined}
               <SenderIdentity frame={frame()} />
               <ChatSendStatus status={frame().sendStatus} actions={options()} />
