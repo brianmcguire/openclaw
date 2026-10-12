@@ -6,7 +6,7 @@ import {
 } from "@openclaw/normalization-core/string-coerce";
 import type { CronConfig } from "../../config/types.cron.js";
 import { normalizeOptionalAccountId } from "../../routing/account-id.js";
-import { resolveCronDeliveryPlan } from "../delivery-plan.js";
+import { resolveCronDeliveryMode } from "../delivery-defaults.js";
 import { assertCronJobStateTimestamps } from "../persisted-shape.js";
 import type { CronScheduledToolPolicy } from "../scheduled-tool-policy.js";
 import { normalizeCronScriptPayload } from "../script-payload.js";
@@ -385,7 +385,7 @@ export function applyJobPatch(
     toolsAllowExecTarget: opts?.toolsAllowExecTarget,
   });
   if (patch.delivery) {
-    const implicitMode = patch.delivery.mode ?? resolveCronDeliveryPlan(job).mode;
+    const implicitMode = patch.delivery.mode ?? resolveCronDeliveryMode(job);
     job.delivery = mergeCronDelivery(job.delivery, patch.delivery, implicitMode);
   }
   if ("failureAlert" in patch) {

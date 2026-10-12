@@ -138,7 +138,7 @@ export async function add(
     };
     const mutationSnapshot = {
       nowMs: state.deps.nowMs(),
-      scheduler: await captureCronSchedulerSnapshot(state, configuredChannels),
+      scheduler: await captureCronSchedulerSnapshot(state, configuredChannels, source),
     };
     const plan = await prepareCronJobMutation(state, source, mutation, mutationSnapshot);
     if (!plan.job) {
@@ -279,7 +279,7 @@ async function updateLoadedJob(params: {
   };
   const mutationSnapshot = {
     nowMs: now,
-    scheduler: await captureCronSchedulerSnapshot(state, configuredChannels),
+    scheduler: await captureCronSchedulerSnapshot(state, configuredChannels, source),
   };
   const plan = await prepareCronJobMutation(state, source, mutation, mutationSnapshot);
   const nextJob = plan.job;

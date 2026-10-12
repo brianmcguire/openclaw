@@ -320,7 +320,7 @@ it("keeps reads responsive and finishes a dispatched repair after the scheduler 
     const job = makeCronRecoveryJob(`job-${index}`, nowMs - 100);
     delete job.state.runningAtMs;
     job.enabled = index < 64;
-    job.state.nextRunAtMs = nowMs + 86_400_000;
+    job.state.nextRunAtMs = job.enabled ? nowMs + 86_400_000 : undefined;
     return job;
   });
   await writeCronStoreSnapshot({ storePath, jobs });
@@ -449,13 +449,16 @@ it("keeps reads responsive and finishes a dispatched repair after the scheduler 
   } finally {
     watchdog?.removeEventListener("abort", releaseStuckWriter);
     cron.stop();
-    await writer?.stop();
-    await pending;
-    observe.mockRestore();
-    for (const receipt of receipts) {
-      releaseLocalCronRunReceiptOwnership(receipt);
+    try {
+      await writer?.stop();
+      await pending;
+    } finally {
+      observe.mockRestore();
+      for (const receipt of receipts) {
+        releaseLocalCronRunReceiptOwnership(receipt);
+      }
+      openOpenClawStateDatabase().db.exec("DROP TABLE IF EXISTS writes");
     }
-    openOpenClawStateDatabase().db.exec("DROP TABLE IF EXISTS writes");
   }
 });
 

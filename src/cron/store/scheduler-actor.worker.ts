@@ -1,4 +1,5 @@
 import { BroadcastChannel } from "node:worker_threads";
+import { deferSqlitePostCommitPublication } from "../../infra/sqlite-post-commit.js";
 import { getSqliteWorkerStateContext } from "../../infra/sqlite-worker-state-context.js";
 import type { OpenClawStateDatabase } from "../../state/openclaw-state-db-contract.js";
 import { runOpenClawStateWriteTransaction } from "../../state/openclaw-state-db.js";
@@ -27,8 +28,9 @@ import {
 import { hasMissedCronSlotSinceLastRun, isRunnableJob } from "../service/timer-runnable.js";
 import type { CronJob } from "../types.js";
 import { hasCanonicalCronDeliveryMode } from "./delivery-codec.js";
-import { loadedCronStoreFromRows, loadCronRows } from "./row-codec.js";
+import { loadedCronStoreFromRows, loadCronRows, updateCronRuntimeRow } from "./row-codec.js";
 import { requestCronRunsInWorker } from "./run-queue.worker.js";
+import { readActiveCronRunReceiptsInDatabase } from "./run-receipt-read.js";
 import { listActiveCronRunReceiptJobIdsInDatabase } from "./run-receipt-store.js";
 import { createCronScheduledRunId } from "./run-request-id.js";
 import { scheduleUnownedCronJobsInWorker } from "./runtime-maintenance.worker.js";
@@ -54,6 +56,16 @@ type SchedulerActor = {
   timer?: ReturnType<typeof setTimeout>;
   lastWallMs?: number;
   lastMonotonicMs?: number;
+  startupBatch?: {
+    immediateReceiptIds: Map<string, string>;
+    overflow: Map<string, StartupOverflow>;
+  };
+};
+
+type StartupOverflow = {
+  catchupAtMs: number;
+  delayMs: number;
+  lastRunAtMs: number | undefined;
 };
 
 const actors = new Map<string, SchedulerActor>();
@@ -66,6 +78,82 @@ function readJobs(database: OpenClawStateDatabase, storeKey: string): CronJob[] 
   return loadedCronStoreFromRows(
     loadCronRows(database.db, storeKey, undefined, { includeGrantDefinitionProjection: true }),
   ).store.jobs;
+}
+
+function waitsForStartupBatch(actor: SchedulerActor, job: CronJob): boolean {
+  const pending = actor.startupBatch?.overflow.get(job.id);
+  return (
+    pending !== undefined &&
+    job.state.nextRunAtMs === pending.catchupAtMs &&
+    job.state.startupCatchupAtMs === pending.catchupAtMs &&
+    job.state.lastRunAtMs === pending.lastRunAtMs
+  );
+}
+
+/** Overflow starts after the immediate batch settles, including completion in another service. */
+export function settleCronStartupBatchInWorker(
+  database: OpenClawStateDatabase,
+  storeKey: string,
+  nowMs: number,
+): CronSchedulerResult {
+  const actor = actors.get(JSON.stringify([database.path, storeKey]));
+  const batch = actor?.startupBatch;
+  const result = emptyResult();
+  if (!actor || !batch) {
+    return result;
+  }
+  const active = readActiveCronRunReceiptsInDatabase(database.db, storeKey, [
+    ...batch.immediateReceiptIds.values(),
+  ]);
+  if (active.some((receipt) => batch.immediateReceiptIds.has(receipt.receiptId))) {
+    return result;
+  }
+  const state: CronJobPolicyContext = {
+    deps: { nowMs: () => nowMs, log: createCronMutationLogger(result.logs) },
+  };
+  runOpenClawStateWriteTransaction(
+    ({ db }) => {
+      const jobs = loadedCronStoreFromRows(
+        loadCronRows(db, storeKey, new Set(batch.overflow.keys())),
+      ).store.jobs;
+      for (const job of jobs) {
+        const pending = batch.overflow.get(job.id);
+        if (
+          !pending ||
+          job.state.nextRunAtMs !== pending.catchupAtMs ||
+          job.state.startupCatchupAtMs !== pending.catchupAtMs
+        ) {
+          continue;
+        }
+        const previousEnabled = job.enabled ?? true;
+        if (job.state.lastRunAtMs !== pending.lastRunAtMs) {
+          // A manual run consumed this catch-up while preserving its own cadence.
+          job.state.startupCatchupAtMs = undefined;
+        } else {
+          job.state.nextRunAtMs = resolveNextRunAtMsOrDisable({
+            state,
+            job,
+            candidate: nowMs + pending.delayMs,
+            deferredNotifications: result.notifications,
+          });
+          job.state.startupCatchupAtMs = job.state.nextRunAtMs;
+        }
+        updateCronRuntimeRow(db, storeKey, job, previousEnabled);
+        result.jobs.push(job);
+      }
+      deferSqlitePostCommitPublication(db, () => {
+        actor.startupBatch = undefined;
+      });
+    },
+    { database, path: database.path, env: getSqliteWorkerStateContext().environment },
+    { operationLabel: "cron.startup-batch-settlement" },
+  );
+  for (const notification of result.notifications) {
+    notification.routing = {
+      defaultAgentId: getCronSchedulerSnapshot(storeKey, database.path)?.config.defaultAgentId,
+    };
+  }
+  return result;
 }
 
 function collectChanges(
@@ -116,7 +204,11 @@ function armActor(
       continue;
     }
     enabled = true;
-    if (!hasActiveCronRun(job, false) && hasScheduledNextRunAtMs(job.state.nextRunAtMs)) {
+    if (
+      !hasActiveCronRun(job, false) &&
+      !waitsForStartupBatch(actor, job) &&
+      hasScheduledNextRunAtMs(job.state.nextRunAtMs)
+    ) {
       nextWakeAtMs = Math.min(nextWakeAtMs ?? Infinity, job.state.nextRunAtMs);
     }
   }
@@ -142,12 +234,13 @@ function isAgentWork(job: CronJob): boolean {
 
 function boundedCatchup(
   database: OpenClawStateDatabase,
+  actor: SchedulerActor,
   storeKey: string,
   snapshot: CronSchedulerSnapshot,
   nowMs: number,
   result: CronSchedulerResult,
   options?: { skipJobIds?: string[]; deferAgentWork?: boolean },
-): CronJob[] {
+): { immediate: CronJob[]; overflow: Map<string, StartupOverflow> } {
   const { config } = snapshot;
   const maxImmediate = Math.max(
     0,
@@ -178,6 +271,7 @@ function boundedCatchup(
             if (
               !isJobEnabled(job) ||
               skipped.has(job.id) ||
+              waitsForStartupBatch(actor, job) ||
               active.has(job.id) ||
               hasActiveCronRun(job, false)
             ) {
@@ -234,6 +328,7 @@ function boundedCatchup(
               ? missed.filter(isAgentWork).map((job) => ({ job, delayMs: agentDelayMs }))
               : []),
           ];
+          const overflow = new Map<string, StartupOverflow>();
           for (const [index, { job, delayMs }] of deferred.entries()) {
             const candidate = nowMs + (delayMs ?? staggerMs) + index * staggerMs;
             job.state.nextRunAtMs = resolveNextRunAtMsOrDisable({
@@ -243,6 +338,13 @@ function boundedCatchup(
               deferredNotifications: notifications,
             });
             job.state.startupCatchupAtMs = job.state.nextRunAtMs;
+            if (delayMs === undefined && job.state.nextRunAtMs !== undefined) {
+              overflow.set(job.id, {
+                catchupAtMs: job.state.nextRunAtMs,
+                delayMs: (index + 1) * staggerMs,
+                lastRunAtMs: job.state.lastRunAtMs,
+              });
+            }
             changed.push(job);
           }
           if (deferred.length > 0) {
@@ -261,7 +363,7 @@ function boundedCatchup(
           }
           result.jobs.push(...changed);
           result.notifications.push(...notifications);
-          return { upsertJobIds: changed.map((job) => job.id), value: immediate };
+          return { upsertJobIds: changed.map((job) => job.id), value: { immediate, overflow } };
         },
       }).value;
     },
@@ -319,24 +421,31 @@ export function runCronSchedulerInWorker(
     elapsedWallMs > MAX_CRON_TIMER_DELAY_MS + MIN_REFIRE_GAP_MS ||
     elapsedWallMs - elapsedMonotonicMs > MIN_REFIRE_GAP_MS;
   const result = emptyResult();
+  collectChanges(result, settleCronStartupBatchInWorker(database, input.storeKey, nowMs));
   if (
     snapshot.config.cronEnabled &&
     (command.type === "cron.schedulerRefresh" ||
       [...actor.channels.values()].some(({ paused }) => !paused))
   ) {
     let candidates: CronJob[] = [];
+    let overflow = new Map<string, StartupOverflow>();
     if (starting || (command.type === "cron.schedulerTick" && forwardJump)) {
-      candidates = boundedCatchup(
+      const catchup = boundedCatchup(
         database,
+        actor,
         input.storeKey,
         snapshot,
         nowMs,
         result,
         command.type === "cron.schedulerStart" ? command.input : undefined,
       );
+      candidates = catchup.immediate;
+      overflow = catchup.overflow;
     } else if (command.type !== "cron.schedulerRefresh") {
-      candidates = readJobs(database, input.storeKey).filter((job) =>
-        isRunnableJob({ job, nowMs, activeInProcess: false }),
+      candidates = readJobs(database, input.storeKey).filter(
+        (job) =>
+          !waitsForStartupBatch(actor, job) &&
+          isRunnableJob({ job, nowMs, activeInProcess: false }),
       );
     }
     const ownerless = candidates.filter(
@@ -391,11 +500,20 @@ export function runCronSchedulerInWorker(
       result.rejected.push(...requested.rejected);
       result.jobs.push(...requested.accepted.map((entry) => entry.job));
     }
+    if (overflow.size > 0 && (actor.startupBatch || result.accepted.length > 0)) {
+      actor.startupBatch ??= { immediateReceiptIds: new Map(), overflow: new Map() };
+      for (const entry of result.accepted) {
+        actor.startupBatch.immediateReceiptIds.set(entry.runReceipt.receiptId, entry.job.id);
+      }
+      for (const [id, pending] of overflow) {
+        actor.startupBatch.overflow.set(id, pending);
+      }
+    }
     // Due work is selected before maintenance; backward clock movement never
     // recomputes a valid future deadline or rewinds an already-consumed slot.
     const options = {
-      recomputeExpired: true,
-      repairFutureCronNextRunAtMs: false,
+      recomputeExpired: command.type !== "cron.schedulerRefresh",
+      repairFutureCronNextRunAtMs: command.type !== "cron.schedulerRefresh" && elapsedWallMs >= 0,
       ...(command.type === "cron.schedulerRefresh" ? command.input.options : undefined),
     };
     if (

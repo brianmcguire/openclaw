@@ -613,6 +613,12 @@ export function needsCronTimerMaintenance(
   if (!isTimeScheduledJob(job)) {
     return TIME_SCHEDULE_STATE_FIELDS.some((key) => job.state[key] !== undefined);
   }
+  if (!isJobEnabled(job)) {
+    return (
+      job.state.forcePreservedNextRunAtMs !== job.state.nextRunAtMs &&
+      TIME_SCHEDULE_STATE_FIELDS.some((key) => job.state[key] !== undefined)
+    );
+  }
   return (
     (options?.recomputeExpired !== false &&
       isExpiredCronScheduleRepairCandidate(job, nowMs, false)) ||

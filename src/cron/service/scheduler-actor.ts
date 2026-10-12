@@ -1,7 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { performance } from "node:perf_hooks";
 import { BroadcastChannel } from "node:worker_threads";
-import { getRuntimeConfigSnapshot } from "../../config/runtime-snapshot.js";
 import { isAbortError } from "../../infra/abort-signal.js";
 import {
   beginGatewayRootWorkAdmissionWhenOpen,
@@ -120,10 +119,6 @@ export async function startCronScheduler(
       !change.scope.startsWith("config")
     ) {
       return;
-    }
-    const config = getRuntimeConfigSnapshot();
-    if (config) {
-      state.deps.cronConfig = config.cron;
     }
     refreshCronScheduler(state);
   });
