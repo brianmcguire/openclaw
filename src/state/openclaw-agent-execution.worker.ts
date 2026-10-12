@@ -64,7 +64,6 @@ import { createAgentDatabaseMaintenanceOwner } from "./openclaw-agent-execution-
 import {
   loadAgentTranscriptReadOperations,
   loadAgentReplacementOperations,
-  loadAgentNativeReplacementOperations,
   loadAgentRestartRecoveryOperations,
   loadAgentEntryReadOperations,
   loadAgentEntryPatchOperations,
@@ -453,7 +452,6 @@ function openAgentDatabaseBackend(
     "session.transcript.anchors.read": loadAgentTranscriptReadOperations,
     "session.transcript.coldMetadata.read": loadAgentTranscriptReadOperations,
     "session.entries.replace": loadAgentReplacementOperations,
-    "session.entries.replaceWithBindings": loadAgentNativeReplacementOperations,
     "session.restart.recover": loadAgentRestartRecoveryOperations,
     "session.entry.acp": loadAgentAcpOperations,
     "session.providerReview.compare": loadAgentProviderReviewOperations,
@@ -615,7 +613,7 @@ function openAgentDatabaseBackend(
           ? command.input
           : command.type === "session.messageCut.commit"
             ? command.input.nativeBindings
-            : command.type === "session.entries.replaceWithBindings" ||
+            : command.type === "session.entries.replace" ||
                 command.type === "session.agentPurge.commit" ||
                 command.type === "session.maintenance.finalize"
               ? command.input.nativeBindings
@@ -624,8 +622,7 @@ function openAgentDatabaseBackend(
         return Promise.all([
           preparing,
           prepareAgentNativeBindingOperation(nativeBindings, input.environment),
-          command.type === "session.entries.replaceWithBindings" &&
-          command.input.initializeTranscript
+          command.type === "session.entries.replace" && command.input.initializeTranscript
             ? prepareAgentTranscript()
             : undefined,
         ]).then(() => {});

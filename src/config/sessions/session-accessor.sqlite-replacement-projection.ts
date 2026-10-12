@@ -21,7 +21,7 @@ import type {
 import type { SessionCreationSnapshot } from "./session-accessor.sqlite-creation-read.js";
 import {
   captureNativeSessionWorkerDeletion,
-  preparedSessionDeletionRequiresNativeTransaction,
+  hasPreparedNativeSessionDeletion,
   runSqliteSessionDeletionTransaction as runOpenClawAgentWriteTransaction,
 } from "./session-accessor.sqlite-deletion.js";
 import { prepareSessionIdentityPublication } from "./session-accessor.sqlite-identity.js";
@@ -400,9 +400,11 @@ async function applySqliteSessionEntryReplacementProjection<T, TReplacement>(
       return {
         deletedEntries: deletedOwners,
         commit: async (assertSourceCurrent) => {
+          const nativeDeletion = captureNativeSessionWorkerDeletion(deletedOwners);
+          // Only opaque companions require the parent's synchronous transaction view.
           const workerCommit =
             Boolean(incognito) ||
-            (useWorker && !preparedSessionDeletionRequiresNativeTransaction());
+            (useWorker && (!hasPreparedNativeSessionDeletion() || Boolean(nativeDeletion)));
           const preparedPreservation =
             params.skipMaintenance === false
               ? await prepareSessionMaintenancePreservation(params.storePath, {
@@ -541,7 +543,6 @@ async function applySqliteSessionEntryReplacementProjection<T, TReplacement>(
             if (typeof snapshot.databaseIdentity !== "string") {
               throw new Error("Session replacement requires its durable database identity");
             }
-            const captured = captureNativeSessionWorkerDeletion(deletedOwners);
             const committed = await commitSessionEntryReplacementsInWorker(
               databaseOptions,
               snapshot.databaseIdentity,
@@ -555,7 +556,7 @@ async function applySqliteSessionEntryReplacementProjection<T, TReplacement>(
                   : undefined,
               },
               params.retainedExecution,
-              captured ? { entries: deletedOwners, captured } : undefined,
+              nativeDeletion,
             );
             return { maintenancePlans: committed.maintenancePlans, result: operation.result };
           } finally {

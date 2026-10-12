@@ -452,8 +452,8 @@ describe("buildStatusText prepared context windows", () => {
     ["legacy usage fallback", "usage/previous-model"],
   ])("keeps %s through independent usage hydration", async (_name, notice) => {
     const readUsage = vi
-      .spyOn(transcriptUsage, "readRecentSessionUsageFromTranscript")
-      .mockReturnValue({
+      .spyOn(transcriptUsage, "readRecentSessionUsageFromTranscriptAsync")
+      .mockResolvedValue({
         modelProvider: "usage",
         model: "previous-model",
         inputTokens: 10,
