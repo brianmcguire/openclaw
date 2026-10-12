@@ -413,7 +413,7 @@ guard with `definition: null`, so it refuses if a service has appeared since
 setup observed no service. The app records an informational marker; it never uses
 that marker as permission to change a service automatically.
 
-**Use bundled runtime…** appears in the tray whenever the existing Gateway uses
+On Linux, **Use bundled runtime…** appears in the tray whenever the existing Gateway uses
 another runtime, including Node, an older bundled Bun, or an operator-selected
 runtime. The action shows the current runtime and asks for confirmation. It
 passes that observation's service definition and runtime pin to the CLI's
@@ -430,10 +430,10 @@ a particular previous executable, use
 `openclaw gateway install --force --runtime-path /absolute/path/to/node-or-bun`.
 
 Startup and desktop updates leave existing Gateway services and runtime pins
-unchanged, including services previously installed by the app. After an app
-update provides a newer Bun, choose **Use bundled runtime…** again to switch.
-The CLI owns service installation. These runtime actions support Linux and Windows; macOS
-Tauri keeps its existing behavior, separate from the native macOS app.
+unchanged, including services previously installed by the app. On Linux, after an
+app update provides a newer Bun, choose **Use bundled runtime…** again to switch.
+The CLI owns service installation on both Linux and Windows; macOS Tauri keeps
+its existing behavior, separate from the native macOS app.
 Switching an existing Gateway's runtime leaves its CLI launcher unchanged.
 
 ## Updates
