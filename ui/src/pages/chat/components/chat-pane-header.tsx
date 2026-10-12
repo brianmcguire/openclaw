@@ -1,12 +1,10 @@
-import type WaPopover from "@awesome.me/webawesome/dist/components/popover/popover.js";
-import { For, Show } from "solid-js";
+import { Show } from "solid-js";
 import { buildControlUiResourcePath } from "../../../../../src/gateway/control-ui-resource-routes.js";
 import type { GatewaySessionRow, SessionBranch } from "../../../api/types.ts";
 import type { ApplicationContext } from "../../../app/context.ts";
 import { resolveControlUiAuthCandidates } from "../../../app/control-ui-auth.ts";
 import { beginNativeWindowDrag } from "../../../app/native-window-drag.ts";
 import {
-  COMMAND_PALETTE_OPEN_EVENT,
   SHELL_NAV_DRAWER_TOGGLE_EVENT,
   type ShellNavDrawerToggleDetail,
 } from "../../../components/command-palette-contract.ts";
@@ -19,9 +17,7 @@ import { renderSessionColorDot } from "../../../components/session-color.ts";
 import { renderSessionOwnerChip } from "../../../components/session-owner-chip.ts";
 import { isCloudWorkerPlacementState } from "../../../components/session-row-badges.ts";
 import { Icon } from "../../../components/solid/icon.tsx";
-import { syncPopoverExpanded, syncPopoverLabel } from "../../../components/web-awesome-popover.ts";
 import "../../../components/tooltip.ts";
-import { formatRelativeTimestamp } from "../../../lib/format.ts";
 import "../../../components/workspace-icon.ts";
 import {
   clearCompositionEnd,
@@ -36,13 +32,8 @@ import {
 } from "../../../lib/sessions/session-key.ts";
 import { nativeListener } from "../../../lib/solid-native-listener.ts";
 import { LitContent, solidContent, emptyLegacyContent } from "../../../lit/solid-content.tsx";
-import { ChatPanePanelToggle } from "./chat-header-panel-actions.tsx";
-export {
-  ChatPanePanelToggle,
-  ChatPanePanelLayoutActions,
-  renderChatPanePanelToggle,
-  renderChatPanePanelLayoutActions,
-} from "./chat-header-panel-actions.tsx";
+import { ChatPaneLayoutMenu, type ChatPaneLayoutMenuProps } from "./chat-header-panel-actions.tsx";
+import { ChatPaneVersionsMenu } from "./chat-pane-versions-menu.tsx";
 
 export type ChatPaneHeaderAction = "reveal" | "copy-path" | "copy-branch";
 
@@ -51,9 +42,7 @@ type ChatPaneParentSession = {
   title: string;
 };
 
-export type ChatPaneHeaderProps = {
-  paneId: string;
-  narrow: boolean;
+export type ChatPaneHeaderProps = ChatPaneLayoutMenuProps & {
   mergedChrome: boolean;
   navDrawerOpen?: boolean;
   title: string;
@@ -83,11 +72,9 @@ export type ChatPaneHeaderProps = {
   canReveal: boolean;
   copiedAction: ChatPaneHeaderAction | null;
   renameDisabledReason?: string;
-  actionsDisabled?: boolean;
-  panelActions: unknown;
+  runningSubagentCount?: number;
   detailsControl?: unknown;
   runAction?: unknown;
-  panelLayoutActions: unknown;
   presence?: unknown;
   sharingControl?: unknown;
   publicAccessIndicator?: unknown;
@@ -101,10 +88,6 @@ export type ChatPaneHeaderProps = {
   onMenuAction: (action: ChatPaneHeaderAction) => void;
   onOpenParentSession: (sessionKey: string) => void;
   onBranchSelect: (leafEntryId: string) => void;
-  onOpenSplitView?: () => void;
-  onSplitDown?: (paneId: string) => void;
-  onSplitRight?: (paneId: string) => void;
-  onClosePane?: (paneId: string) => void;
 };
 
 function revealLabel(platform: string | null): string {
@@ -322,8 +305,6 @@ export function canRevealSessionWorkspace(params: {
 
 export function ChatPaneHeader(props: ChatPaneHeaderProps) {
   const drawerLabel = () => (props.navDrawerOpen ? t("nav.collapse") : t("nav.expand"));
-  const compactSessionActions = () =>
-    props.narrow && props.sessionMenuAction !== emptyLegacyContent;
   const hasSharingControl = () =>
     props.sharingControl !== undefined && props.sharingControl !== emptyLegacyContent;
 
@@ -331,7 +312,11 @@ export function ChatPaneHeader(props: ChatPaneHeaderProps) {
     <div
       class={[
         "chat-pane__header",
-        { "chat-pane__header--closable": props.onClosePane !== undefined },
+        {
+          "chat-pane__header--closable": props.onClosePane !== undefined,
+          "chat-pane__header--stacked-status":
+            props.narrow && (props.runningSubagentCount ?? 0) > 0,
+        },
       ]}
       role="group"
       aria-label={props.title}
@@ -371,9 +356,7 @@ export function ChatPaneHeader(props: ChatPaneHeaderProps) {
           </span>
         ) : undefined}
         <IdentityCrumbs {...props} /> <LitContent value={props.publicAccessIndicator} />
-        {hasSharingControl() ? (
-          <LitContent value={props.sharingControl} />
-        ) : (
+        {hasSharingControl() ? undefined : (
           <LitContent
             value={renderStandalonePersonLink(
               renderSessionOwnerChip(
@@ -408,154 +391,28 @@ export function ChatPaneHeader(props: ChatPaneHeaderProps) {
       </div>
       <div class="chat-pane__header-trailing">
         <LitContent value={props.detailsControl} />
-        {!props.catalog && props.branches.length > 1 ? (
-          <wa-dropdown
-            class="chat-pane__branches-menu"
-            placement="bottom-end"
-            onWa-hide={(event: Event) => {
-              const menu = event.currentTarget;
-              if (event.target === menu && menu instanceof HTMLElement) {
-                const help = menu.querySelector<WaPopover>(".chat-pane__versions-help");
-                if (help) {
-                  help.open = false;
-                }
-              }
-            }}
-            onWa-select={(event: CustomEvent<{ item: { value?: string } }>) => {
-              const leafEntryId = event.detail.item.value;
-              const branch = props.branches.find(
-                (candidate) => candidate.leafEntryId === leafEntryId,
-              );
-              if (leafEntryId && branch && !branch.active && !props.branchSwitchDisabledReason) {
-                props.onBranchSelect(leafEntryId);
-              }
-            }}
-          >
-            <button
-              slot="trigger"
-              class="btn btn--ghost btn--icon chat-icon-btn chat-pane__branches-trigger"
-              type="button"
-              disabled={Boolean(props.branchSwitchDisabledReason)}
-              title={props.branchSwitchDisabledReason ?? t("chat.sessionHeader.branches")}
-              aria-label={t("chat.sessionHeader.branches")}
-            >
-              <Icon name="history" />
-            </button>
-            <div class="chat-pane__versions-heading">
-              <span>{t("chat.sessionHeader.branches")}</span>
-              <button
-                id={`versions-help-${props.paneId}`}
-                class="btn btn--ghost btn--icon chat-pane__versions-info"
-                type="button"
-                autofocus
-                aria-label={t("chat.sessionHeader.versionsHelpLabel")}
-                aria-haspopup="dialog"
-                aria-expanded="false"
-                aria-controls={`versions-help-content-${props.paneId}`}
-              >
-                <Icon name="info" />
-              </button>
-              <wa-popover
-                ref={syncPopoverLabel}
-                id={`versions-help-content-${props.paneId}`}
-                class="chat-pane__versions-help"
-                for={`versions-help-${props.paneId}`}
-                aria-label={t("chat.sessionHeader.versionsHelpLabel")}
-                placement="bottom-end"
-                onWa-show={syncPopoverExpanded}
-                onWa-hide={syncPopoverExpanded}
-              >
-                {t("chat.sessionHeader.versionsHelp")}
-              </wa-popover>
-            </div>
-            <For each={props.branches} keyed={(branch) => branch.leafEntryId}>
-              {(branch) => {
-                const relativeTime = () =>
-                  formatRelativeTimestamp(Date.parse(branch().updatedAt ?? ""), { fallback: "" });
-                return (
-                  <wa-dropdown-item
-                    class="chat-pane__branch-item"
-                    value={branch().leafEntryId}
-                    disabled={branch().active || Boolean(props.branchSwitchDisabledReason)}
-                    data-active={branch().active ? "true" : "false"}
-                  >
-                    <span class="chat-pane__branch-copy">
-                      <span class="chat-pane__branch-headline">
-                        {branch().headline || t("chat.sessionHeader.untitledBranch")}
-                      </span>
-                      <span class="chat-pane__branch-meta">
-                        {t(
-                          branch().messageCount === 1
-                            ? "chat.sessionHeader.oneMessage"
-                            : "chat.sessionHeader.messages",
-                          { count: String(branch().messageCount) },
-                        )}
-                        {relativeTime() ? ` · ${relativeTime()}` : ""}
-                      </span>
-                    </span>
-                    {branch().active ? (
-                      <span
-                        slot="details"
-                        class="chat-pane__branch-active"
-                        aria-label={t("chat.sessionHeader.activeBranch")}
-                      >
-                        <Icon name="check" />
-                      </span>
-                    ) : undefined}
-                  </wa-dropdown-item>
-                );
-              }}
-            </For>
-          </wa-dropdown>
-        ) : undefined}
+        <ChatPaneVersionsMenu
+          menu={{
+            catalog: props.catalog,
+            paneId: props.paneId,
+            branches: props.branches,
+            branchSwitchDisabledReason: props.branchSwitchDisabledReason,
+            onBranchSelect: props.onBranchSelect,
+          }}
+        />
         <div class="chat-pane__actions">
-          <LitContent value={props.runAction} /> <LitContent value={props.panelLayoutActions} />
-          <fieldset class="chat-pane__actions" disabled={Boolean(props.actionsDisabled)}>
-            {compactSessionActions() ? undefined : <LitContent value={props.panelActions} />}
-            <Show when={props.onOpenSplitView !== undefined && !compactSessionActions()}>
-              <ChatPanePanelToggle
-                class="chat-open-split-view"
-                label={t("chat.splitView.open")}
-                icon={<Icon name="columns2" />}
-                onToggle={() => props.onOpenSplitView?.()}
-              />
-            </Show>
-            <Show when={!props.narrow && props.onSplitDown !== undefined}>
-              <ChatPanePanelToggle
-                class="chat-pane__split-down"
-                label={t("chat.splitView.splitDown")}
-                icon={<Icon name="panelBottomOpen" />}
-                onToggle={() => props.onSplitDown?.(props.paneId)}
-              />
-            </Show>
-            <Show when={!props.narrow && props.onSplitRight !== undefined}>
-              <ChatPanePanelToggle
-                class="chat-pane__split-right"
-                label={t("chat.splitView.splitRight")}
-                icon={<Icon name="panelRightOpen" />}
-                onToggle={() => props.onSplitRight?.(props.paneId)}
-              />
-            </Show>
-            <Show when={props.onClosePane !== undefined}>
-              <ChatPanePanelToggle
-                class="chat-pane__close-pane"
-                label={t("chat.splitView.closePane")}
-                icon={<Icon name="x" />}
-                onToggle={() => props.onClosePane?.(props.paneId)}
-              />
-            </Show>
-            <Show when={props.mergedChrome && !compactSessionActions()}>
-              <ChatPanePanelToggle
-                class="chat-pane__palette-open"
-                label={t("chat.openCommandPalette")}
-                icon={<Icon name="search" />}
-                onToggle={() => window.dispatchEvent(new Event(COMMAND_PALETTE_OPEN_EVENT))}
-              />
-            </Show>
-            <LitContent value={props.sessionMenuAction} />
-          </fieldset>
+          <Show when={!props.narrow}>
+            <RunningSubagents count={props.runningSubagentCount} />
+          </Show>
+          <LitContent value={props.runAction} />
+          <LitContent value={props.sharingControl} />
+          <ChatPaneLayoutMenu {...props} />
+          <LitContent value={props.sessionMenuAction} />
         </div>
       </div>
+      <Show when={props.narrow}>
+        <RunningSubagents count={props.runningSubagentCount} />
+      </Show>
     </div>
   );
 }
@@ -581,6 +438,18 @@ export function resolveChatPaneWorkspaceIcon(
   };
 }
 
+function RunningSubagents(props: { count?: number }) {
+  return (
+    <Show when={(props.count ?? 0) > 0}>
+      <span class="chat-pane__subagents-running">
+        <span aria-hidden="true">
+          <Icon name="bot" />
+        </span>
+        {t("chat.sessionHeader.subagentsRunning", { count: String(props.count) })}
+      </span>
+    </Show>
+  );
+}
 export const renderChatPaneHeader = (props: ChatPaneHeaderProps) =>
   solidContent(ChatPaneHeader, props);
 declare module "@solidjs/web" {

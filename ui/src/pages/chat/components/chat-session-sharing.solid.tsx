@@ -448,7 +448,7 @@ export function ChatSessionSharing(props: ChatSessionSharingProps & { inline?: b
           >
             <button
               slot="trigger"
-              class="btn btn--ghost btn--icon chat-icon-btn chat-pane__sharing-trigger"
+              class="btn btn--ghost chat-pane__sharing-trigger"
               type="button"
               aria-label={t("chat.sessionSharing.menu")}
               disabled={Boolean(props.openDisabledReason)}
@@ -460,6 +460,7 @@ export function ChatSessionSharing(props: ChatSessionSharingProps & { inline?: b
               }
             >
               <SharingIcon visibility={visibility()} />
+              <span>{t("chat.sessionSharing.share")}</span>
             </button>
             <SharingContent {...props} />
           </wa-dropdown>

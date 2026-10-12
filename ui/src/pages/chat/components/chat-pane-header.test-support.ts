@@ -44,8 +44,6 @@ export function mountChatPaneHeader(
     canReveal: true,
     copiedAction: null,
     renameDisabledReason: undefined,
-    panelActions: nothing,
-    panelLayoutActions: nothing,
     sessionMenuAction: nothing,
     onBeginRename: vi.fn(),
     onRenameInput: vi.fn(),
@@ -62,7 +60,9 @@ export function mountChatPaneHeader(
   const mounted = mountSolid(() => createComponent(ChatPaneHeader, liveProps), { container });
   return {
     container,
-    props,
+    get props() {
+      return current();
+    },
     unmount: mounted.unmount,
     update(this: void, changes: Partial<ChatPaneHeaderProps>) {
       setCurrent({ ...current(), ...changes });

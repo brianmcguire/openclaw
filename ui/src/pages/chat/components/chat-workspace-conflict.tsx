@@ -3,7 +3,7 @@ import { handleCopyButton } from "../../../components/copy-button-state.ts";
 import { CopyButton } from "../../../components/solid/copy-button.tsx";
 import { Icon } from "../../../components/solid/icon.tsx";
 import { t } from "../../../lib/reactive/i18n.ts";
-import { solidContent } from "../../../lit/solid-content.tsx";
+import { emptyLegacyContent, solidContent } from "../../../lit/solid-content.tsx";
 import {
   visibleWorkspaceConflictPaths,
   workspaceConflictCount,
@@ -217,7 +217,7 @@ export function WorkspaceConflictTranscriptMessage(props: {
 
 export const renderWorkspaceConflictNotice = (
   props: Parameters<typeof WorkspaceConflictNotice>[0],
-) => solidContent(WorkspaceConflictNotice, props);
+) => (props.conflict ? solidContent(WorkspaceConflictNotice, props) : emptyLegacyContent);
 export function renderWorkspaceConflictTranscriptMessage(
   conflict: WorkspaceResultConflict,
   messageKey: string,

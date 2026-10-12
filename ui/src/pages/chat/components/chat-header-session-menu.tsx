@@ -1,4 +1,3 @@
-import { html, nothing } from "lit";
 import { createSignal, onSettled, For, Show } from "solid-js";
 import type { UiSettings } from "../../../app/settings.ts";
 import { renderBoardGrantedCapabilities } from "../../../components/board/board-widget-capabilities.ts";
@@ -20,6 +19,7 @@ import {
   type CompactSessionMenuView,
 } from "../../../components/session-menu-compact.ts";
 import { useSessionMenuControllers } from "../../../components/session-menu-controllers.ts";
+import { renderHeaderTerminalAction } from "../../../components/session-menu-options.ts";
 import type { SessionCreatedActor } from "../../../components/session-owner-chip.ts";
 import { Icon } from "../../../components/solid/icon.tsx";
 import { useOptionalApplication } from "../../../lib/reactive/context.ts";
@@ -71,19 +71,6 @@ const COMPACT_MENU_VIEW_BY_VALUE: Record<string, CompactMenuView> = {
   "compact:open-sharing": "sharing",
   "compact:open-view": "view",
 };
-
-// SessionMenuActions still consumes a Lit template for its shared Open in submenu.
-function renderHeaderTerminalAction(inline: boolean, disabledReason?: string) {
-  return html`<wa-dropdown-item
-    slot=${inline ? nothing : "submenu"}
-    class="session-menu__item"
-    value="continue-in-terminal"
-    ?disabled=${Boolean(disabledReason)}
-    title=${disabledReason ?? nothing}
-    ><span slot="icon" class="session-menu__icon" aria-hidden="true">${icons.terminal}</span>
-    <span class="session-menu__text">${t("chat.sessionHeader.continueInTerminal.action")}</span>
-  </wa-dropdown-item>`;
-}
 
 export type ChatHeaderSessionMenuProps = {
   session: SessionMenuData;
@@ -470,17 +457,13 @@ export function ChatHeaderSessionMenuContent(
   function RootView() {
     return (
       <>
-        {props.compact ? (
-          <>
-            <wa-dropdown-item class="session-menu__item" value="open-command-palette">
-              <span slot="icon" class="session-menu__icon" aria-hidden="true">
-                <Icon name="search" />
-              </span>
-              <span class="session-menu__text">{t("chat.openCommandPalette")}</span>
-            </wa-dropdown-item>
-            <div class="session-menu__separator" role="separator" />
-          </>
-        ) : undefined}
+        <wa-dropdown-item class="session-menu__item" value="open-command-palette">
+          <span slot="icon" class="session-menu__icon" aria-hidden="true">
+            <Icon name="search" />
+          </span>
+          <span class="session-menu__text">{t("chat.openCommandPalette")}</span>
+        </wa-dropdown-item>
+        <div class="session-menu__separator" role="separator" />
         {props.boardWidgetMenu ? (
           <>
             <div class="board-widget__page-menu-heading">

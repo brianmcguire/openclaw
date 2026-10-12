@@ -22,6 +22,7 @@ import {
   installTranscriptDomMocks,
   resetTranscriptTestDom,
 } from "./components/chat-transcript.test-support.ts";
+import { isSidebarSlotVisible, openSlot } from "./sidebar-layout.ts";
 
 vi.mock("../../lib/toast.ts", () => ({ showToast: vi.fn() }));
 
@@ -90,11 +91,13 @@ describe("chat pane session menu boundary", () => {
     expect(
       [...menu.querySelectorAll("wa-dropdown-item")].every((item, index) => item === items[index]),
     ).toBe(true);
-    menu.querySelector("wa-dropdown")!.dispatchEvent(
+    container.querySelector(".chat-pane__layout-menu")!.dispatchEvent(
       new CustomEvent("wa-select", {
-        detail: { item: { value: "quick:panels:session-files" } },
+        detail: { item: { value: "session-files" } },
       }),
     );
+    expect(workspace.onToggleCollapsed).not.toHaveBeenCalled();
+    container.querySelector(".chat-pane__layout-menu")!.dispatchEvent(new Event("wa-after-hide"));
     expect(workspace.onToggleCollapsed).toHaveBeenCalledOnce();
 
     state.settings = { ...state.settings };
@@ -134,6 +137,35 @@ describe("chat pane session menu boundary", () => {
       chatShowToolCalls: !state.settings.chatShowToolCalls,
     });
   });
+
+  it.each(["subagents", "processes"] as const)(
+    "keeps the selected %s opening intent when live state changes while Layout hides",
+    (slot) => {
+      const { pane, state } = createTestChatPane({ client: createGatewayBrowserClientFixture() });
+      const container = document.body.appendChild(document.createElement("div"));
+      const draw = () =>
+        render(
+          pane.renderPaneHeader(
+            createPaneHeaderWorkspaceFixture(state),
+            undefined,
+            false,
+            undefined,
+            false,
+            null,
+          ),
+          container,
+        );
+      draw();
+      const menu = container.querySelector(".chat-pane__layout-menu")!;
+      menu.dispatchEvent(
+        new CustomEvent("wa-select", { detail: { item: { value: `session-${slot}` } } }),
+      );
+      state.updateSidebarLayout(openSlot(state.sidebarLayout, slot));
+      draw();
+      menu.dispatchEvent(new Event("wa-after-hide"));
+      expect(isSidebarSlotVisible(state.sidebarLayout, slot)).toBe(true);
+    },
+  );
 
   it("keeps observed pane titles and renames with their conversations when agent selection changes", async () => {
     const primary: GatewaySessionRow = {
