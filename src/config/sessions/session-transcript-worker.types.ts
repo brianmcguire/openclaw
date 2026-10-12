@@ -233,12 +233,12 @@ type SessionRowBackfillWorkerInput = {
   params: SessionRowTranscriptReadParams;
 };
 
-export type SessionEntryCurrentWorkerInput = Omit<SessionEntryReadWorkerInput, "kind"> & {
+type SessionEntryCurrentWorkerInput = Omit<SessionEntryReadWorkerInput, "kind"> & {
   kind: "session-entry-current";
   source?: SessionEntryCurrentSource;
 };
 
-export type SessionEntryCurrentWorkerResult = {
+type SessionEntryCurrentWorkerResult = {
   kind: "session-entry-current";
   entry: SessionEntryCurrentFacts | undefined;
   source?: CapturedSessionEntryReadSource & { databaseIdentity: string };

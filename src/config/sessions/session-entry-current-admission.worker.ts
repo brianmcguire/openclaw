@@ -103,7 +103,7 @@ function createCurrentEntryRead(
   };
 }
 
-export function readSessionEntryCurrentFactsInDatabase(
+function readSessionEntryCurrentFactsInDatabase(
   database: OpenClawAgentReadOnlyDatabase,
   sessionKey: string,
   lookup: "exact" | "logical" = "exact",
@@ -128,7 +128,7 @@ export function readSessionEntryCurrentFactsInDatabase(
   return readWithCanonicalSessionAdmission(database, cached.read);
 }
 
-export function assertSessionEntryCurrentNativeSource(
+function assertSessionEntryCurrentNativeSource(
   source: SessionEntryCurrentSource,
   database?: OpenClawAgentReadOnlyDatabase,
 ): void {
