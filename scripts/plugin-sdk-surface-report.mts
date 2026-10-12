@@ -203,6 +203,8 @@ const defaultPublicDeprecatedExportsByEntrypointBudget = Object.freeze({
   "command-auth-native": 3,
   "native-command-registry": 1,
   "skill-commands-runtime": 2,
+  // +1: createSessionHeaderLink from shipped 2026.10.1 until plugin-sdk-session-header-link expires.
+  "control-ui": 1,
 } satisfies Record<string, number>);
 
 export function readPluginSdkSurfaceBudgets(env: NodeJS.ProcessEnv = process.env) {
@@ -241,7 +243,8 @@ export function readPluginSdkSurfaceBudgets(env: NodeJS.ProcessEnv = process.env
       // +1: preview adapters strip only normalization-owned response decoration.
       // +1: shared stale-read cache replaces board, preview, search, and credential cache policies.
       // +2: approved async transcript event/stat read replacements.
-      3698,
+      // +1: deprecated createSessionHeaderLink retained from shipped 2026.10.1.
+      3699,
       env,
     ),
     publicFunctionExports: readPluginSdkSurfaceBudgetEnv(
@@ -267,7 +270,8 @@ export function readPluginSdkSurfaceBudgets(env: NodeJS.ProcessEnv = process.env
       // +1: stripReplyPayloadResponsePrefix preserves durable text while assembling previews.
       // +1: the same bounded stale-read cache factory on collection-runtime.
       // +2: the same transcript read replacement pairs.
-      2159,
+      // +1: the same deprecated createSessionHeaderLink.
+      2160,
       env,
     ),
     publicDeprecatedExports: readPluginSdkSurfaceBudgetEnv(
@@ -281,7 +285,8 @@ export function readPluginSdkSurfaceBudgets(env: NodeJS.ProcessEnv = process.env
       // +15: retained synchronous auth, model, and TTS compatibility exports.
       // +7: retained synchronous session, command-menu, model-override, TTS-path, and list exports.
       // +2: retained synchronous transcript event/stat reads until the next SDK major.
-      185,
+      // +1: createSessionHeaderLink from shipped 2026.10.1 until plugin-sdk-session-header-link expires.
+      186,
       env,
     ),
     publicWildcardReexports: readPluginSdkSurfaceBudgetEnv(
