@@ -18,6 +18,10 @@ vi.mock("../cli/gateway-rpc.js", () => ({
 vi.mock("../config/config.js", () => ({
   getRuntimeConfig: mocks.getRuntimeConfig,
   loadConfig: mocks.getRuntimeConfig,
+  captureRuntimeConfigAsyncReader:
+    (...args: Parameters<typeof mocks.getRuntimeConfig>) =>
+    async () =>
+      mocks.getRuntimeConfig(...args),
 }));
 
 vi.mock("../wizard/clack-prompter.js", () => ({

@@ -30,6 +30,7 @@ const mocks = vi.hoisted(() => ({
 vi.mock("../config/config.js", () => ({
   getRuntimeConfig: mocks.getRuntimeConfig,
   loadConfig: mocks.getRuntimeConfig,
+  captureRuntimeConfigAsyncReader: () => async () => mocks.getRuntimeConfig(),
 }));
 // mock-isolation: Supply inert key input without reading the test runner's terminal.
 vi.mock("../commands/models/auth-gateway.js", () => ({

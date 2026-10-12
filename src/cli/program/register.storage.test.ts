@@ -21,6 +21,7 @@ vi.mock("../../config/config.js", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../../config/config.js")>()),
   getRuntimeConfig: () => fixture.config,
   loadConfig: () => fixture.config,
+  captureRuntimeConfigAsyncReader: () => async () => fixture.config,
 }));
 vi.mock("../../runtime.js", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../../runtime.js")>()),

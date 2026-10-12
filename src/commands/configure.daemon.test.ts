@@ -35,6 +35,7 @@ vi.mock("../cli/progress.js", () => ({
 vi.mock("../config/config.js", () => ({
   getRuntimeConfig: loadConfig,
   loadConfig,
+  captureRuntimeConfigAsyncReader: () => async () => loadConfig(),
 }));
 
 vi.mock("./gateway-install-token.js", () => ({

@@ -49,6 +49,7 @@ const applyPluginAutoEnable = vi.hoisted(() => vi.fn(({ config }) => ({ config, 
 vi.mock("../config/config.js", () => ({
   getRuntimeConfig: () => testConfig,
   loadConfig: () => testConfig,
+  captureRuntimeConfigAsyncReader: () => async () => testConfig,
 }));
 
 vi.mock("../config/plugin-auto-enable.js", () => ({

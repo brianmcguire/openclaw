@@ -117,7 +117,11 @@ vi.mock("../runtime.js", async (importOriginal) => ({
   },
 }));
 // mock-isolation: Attach actions use empty fixture config without reading operator state.
-vi.mock("../config/io.js", () => ({ getRuntimeConfig: () => ({}), loadConfig: () => ({}) }));
+vi.mock("../config/io.js", () => ({
+  getRuntimeConfig: () => ({}),
+  loadConfig: () => ({}),
+  captureRuntimeConfigAsyncReader: () => async () => ({}),
+}));
 
 import { callGateway } from "../gateway/call.js";
 import { defaultRuntime, ExitError } from "../runtime.js";

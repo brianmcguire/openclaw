@@ -13,6 +13,10 @@ const mocks = vi.hoisted(() => ({
 vi.mock("../../config/config.js", () => ({
   getRuntimeConfig: mocks.getRuntimeConfig,
   loadConfig: mocks.getRuntimeConfig,
+  captureRuntimeConfigAsyncReader:
+    (...args: Parameters<typeof mocks.getRuntimeConfig>) =>
+    async () =>
+      mocks.getRuntimeConfig(...args),
   getRuntimeConfigSourceSnapshot: mocks.getRuntimeConfigSourceSnapshot,
   setRuntimeConfigSnapshot: mocks.setRuntimeConfigSnapshot,
 }));

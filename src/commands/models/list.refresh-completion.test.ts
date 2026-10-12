@@ -107,7 +107,9 @@ module.exports = {
     retireAfterTest(() => {
       unregisterResolvedAgentDir({ agentId: "main", agentDir, env });
     });
-    vi.spyOn(runtimeConfig, "loadConfig").mockReturnValue(config);
+    vi.spyOn(runtimeConfig, "captureRuntimeConfigAsyncReader").mockReturnValue(
+      Object.assign(async () => config, { assertCurrent() {} }),
+    );
     vi.spyOn(configLoader, "loadModelsConfigWithSource").mockResolvedValue({
       sourceConfig: config,
       resolvedConfig: config,

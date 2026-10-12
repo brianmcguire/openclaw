@@ -15,7 +15,12 @@ import {
 
 vi.mock("../config/config.js", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../config/config.js")>();
-  return { ...actual, loadConfig: vi.fn(actual.loadConfig) };
+  const loadConfigMock = vi.fn(actual.loadConfig);
+  return {
+    ...actual,
+    loadConfig: loadConfigMock,
+    captureRuntimeConfigAsyncReader: () => async () => loadConfigMock(),
+  };
 });
 
 vi.mock("../state/onboarding-recommendations.js", async (importOriginal) => {

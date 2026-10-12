@@ -33,6 +33,7 @@ vi.mock("../node-host/config.js", () => ({ loadNodeHostConfig: mocks.loadNodeHos
 vi.mock("../config/config.js", () => ({
   getRuntimeConfig: vi.fn(() => ({})),
   loadConfig: vi.fn(() => ({})),
+  captureRuntimeConfigAsyncReader: () => async () => ({}),
   mutateConfigFileWithRetry: mocks.mutateConfigFileWithRetry,
 }));
 vi.mock("./node-cli/daemon.js", () => ({

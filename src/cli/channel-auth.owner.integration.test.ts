@@ -19,6 +19,7 @@ const fixture = vi.hoisted(() => ({
 vi.mock("../config/config.js", () => ({
   getRuntimeConfig: () => fixture.config,
   loadConfig: () => fixture.config,
+  captureRuntimeConfigAsyncReader: () => async () => fixture.config,
 }));
 vi.mock("../commands/config-validation.js", () => ({
   requireValidConfigForWrite: async () => ({

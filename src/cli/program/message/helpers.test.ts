@@ -33,6 +33,7 @@ const loadPluginRegistryHandleMock = vi.fn(() => pluginRegistry);
 vi.mock("../../../config/config.js", () => ({
   getRuntimeConfig: () => ({}),
   loadConfig: () => ({}),
+  captureRuntimeConfigAsyncReader: () => async () => ({}),
 }));
 vi.mock("../../../plugins/channel-plugin-ids.js", () => ({
   resolveConfiguredChannelPluginIds: () => ["configured-channel"],

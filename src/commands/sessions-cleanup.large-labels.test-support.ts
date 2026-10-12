@@ -19,6 +19,7 @@ let serviceCalls = 0;
 mockNativeModuleExports(new URL(`../config/config.${extension}`, import.meta.url), {
   getRuntimeConfig: () => ({}),
   loadConfig: () => ({}),
+  captureRuntimeConfigAsyncReader: () => async () => ({}),
 });
 mockNativeModuleExports(new URL(`./session-store-targets.${extension}`, import.meta.url), {
   resolveCommandSessionStoreTargets: () => [{ agentId: "main", storePath }],

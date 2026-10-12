@@ -13,6 +13,7 @@ import {
   initialModelFallbackAttemptOptions,
   type TestModelFallbackRunnerParams,
 } from "../../agents/test-helpers/model-fallback-runner.test-support.js";
+import { setRuntimeConfigSnapshot } from "../../config/runtime-snapshot.js";
 import type { ModelDefinitionConfig } from "../../config/types.models.js";
 import {
   createUserTurnTranscriptRecorder,
@@ -321,7 +322,8 @@ vi.mock("./agent-runner-utils.js", async () => ({
   }),
 }));
 
-vi.mock("./reply-delivery.js", () => ({
+vi.mock("./reply-delivery.js", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("./reply-delivery.js")>()),
   createBlockReplyDeliveryHandler: (params: unknown) =>
     state.createBlockReplyDeliveryHandlerMock(params),
 }));
@@ -337,6 +339,7 @@ vi.mock("./reply-media-paths.js", async (importOriginal) => ({
 export async function getExecuteAgentTurnForTest() {
   const execute = (await import("./agent-runner-execution.js")).executeAgentTurn;
   return async (...args: Parameters<typeof execute>) => {
+    setRuntimeConfigSnapshot(args[0].followupRun.run.config);
     const execution = await execute(...args);
     const outcome = execution.outcome;
     if (outcome.kind === "settled") {

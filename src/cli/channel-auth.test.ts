@@ -50,6 +50,10 @@ vi.mock("../channels/plugins/index.js", () => ({
 vi.mock("../config/config.js", () => ({
   getRuntimeConfig: mocks.loadConfig,
   loadConfig: mocks.loadConfig,
+  captureRuntimeConfigAsyncReader:
+    (...args: Parameters<typeof mocks.loadConfig>) =>
+    async () =>
+      mocks.loadConfig(...args),
   readConfigFileSnapshot: mocks.readConfigFileSnapshot,
   readConfigFileSnapshotForWrite: async () => ({
     snapshot: await mocks.readConfigFileSnapshot(),

@@ -30,6 +30,7 @@ const {
 vi.mock("../config/config.js", () => ({
   getRuntimeConfig: () => mocks.loadConfig(),
   loadConfig: () => mocks.loadConfig(),
+  captureRuntimeConfigAsyncReader: () => async () => mocks.loadConfig(),
 }));
 
 vi.mock("../runtime.js", () => ({

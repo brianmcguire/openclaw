@@ -117,6 +117,10 @@ vi.mock("../utils.js", async (importOriginal) => ({
 vi.mock("../config/config.js", () => ({
   getRuntimeConfig: mocks.config,
   loadConfig: mocks.config,
+  captureRuntimeConfigAsyncReader:
+    (...args: Parameters<typeof mocks.config>) =>
+    async () =>
+      mocks.config(...args),
 }));
 vi.mock("../agents/agent-scope.js", () => ({
   resolveAgentIdByWorkspacePath: mocks.inferredAgent,

@@ -52,6 +52,7 @@ vi.mock("../config/config.js", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../config/config.js")>()),
   getRuntimeConfig: () => mocks.config,
   loadConfig: () => mocks.config,
+  captureRuntimeConfigAsyncReader: () => async () => mocks.config,
   resetConfigRuntimeState: () => undefined,
 }));
 vi.mock("../agents/agent-scope.js", async (importOriginal) => ({

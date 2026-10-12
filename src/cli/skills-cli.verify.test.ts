@@ -53,6 +53,7 @@ vi.mock("../utils.js", async (importOriginal) => ({
 vi.mock("../config/config.js", () => ({
   getRuntimeConfig: () => ({}),
   loadConfig: () => ({}),
+  captureRuntimeConfigAsyncReader: () => async () => ({}),
 }));
 
 vi.mock("../agents/agent-scope.js", () => ({

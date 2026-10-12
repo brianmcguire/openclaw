@@ -335,6 +335,7 @@ vi.mock("../config/config.js", () => ({
   },
   getRuntimeConfig: () => pluginCliConfigMock(),
   loadConfig: () => pluginCliConfigMock(),
+  captureRuntimeConfigAsyncReader: () => async () => pluginCliConfigMock(),
   readConfigFileSnapshot: ((
     ...args: Parameters<(typeof import("../config/config.js"))["readConfigFileSnapshot"]>
   ) =>

@@ -42,6 +42,7 @@ vi.mock("../config/config.js", () => ({
   assertConfigWriteAllowedInCurrentMode: vi.fn(),
   getRuntimeConfig: mocks.getRuntimeConfig,
   loadConfig: mocks.getRuntimeConfig,
+  captureRuntimeConfigAsyncReader: () => async () => mocks.getRuntimeConfig(),
   readConfigFileSnapshot: vi.fn(),
   replaceConfigFile: vi.fn(),
 }));
