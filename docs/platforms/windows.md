@@ -43,7 +43,7 @@ Authenticode. Installer Authenticode signing is separately enabled by the
 release owner; Windows may show an unknown-publisher warning for an unsigned
 installer.
 
-### Troubleshooting
+### Desktop app troubleshooting
 
 - **Signed runtime unavailable:** update the desktop app after a Windows-enabled
   runtime release, or use a remote Gateway. Linux, macOS, and unsigned test
