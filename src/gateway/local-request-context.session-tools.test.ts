@@ -845,7 +845,6 @@ describe("built-in session tool role authority", () => {
         }
         await settled.promise;
         await archived.promise;
-        // The RPC resolves before its continuation's finally releases the source hold.
         await sourceReleased.promise;
         expect(readGatewayDeviceSourceAuthority(source.isCurrent)?.()).toBe(false);
         expect(loadSessionEntry({ agentId: "main", sessionKey })).toMatchObject({
