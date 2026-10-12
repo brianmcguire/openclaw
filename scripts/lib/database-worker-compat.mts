@@ -511,6 +511,8 @@ export function inspectDatabaseWorkerCompatibility(
     }
   }
   const edges = new Map<CompatibilityOperation, Set<CompatibilityOperation>>();
+  const callerEdges = new Map<CompatibilityOperation, Set<CompatibilityOperation>>();
+  const runtimeReferences = new Set<CompatibilityOperation>();
   for (const [owner, members] of families) {
     const outgoing = edges.get(owner) ?? new Set<CompatibilityOperation>();
     for (const member of members) {
@@ -629,6 +631,9 @@ export function inspectDatabaseWorkerCompatibility(
           const outgoing = edges.get(owner) ?? new Set<CompatibilityOperation>();
           outgoing.add(callee);
           edges.set(owner, outgoing);
+          const calls = callerEdges.get(owner) ?? new Set<CompatibilityOperation>();
+          calls.add(callee);
+          callerEdges.set(owner, calls);
         } else {
           let nonRuntime = false;
           if (!callee.reviewed && directCall && !unprovenCallback) {
@@ -654,6 +659,7 @@ export function inspectDatabaseWorkerCompatibility(
             );
           }
           callee.valid = false;
+          runtimeReferences.add(callee);
         }
       }
     }
@@ -673,10 +679,16 @@ export function inspectDatabaseWorkerCompatibility(
       }
     }
   }
+  // An unproven member keeps its family live, but does not establish a factory caller.
+  for (const caller of runtimeReferences) {
+    for (const callee of [...(callerEdges.get(caller) ?? []), ...(families.get(caller) ?? [])]) {
+      runtimeReferences.add(callee);
+    }
+  }
   for (const operation of declarations.values()) {
     if (
       operation.reviewed &&
-      !operation.valid &&
+      runtimeReferences.has(operation) &&
       !violations.some((violation) => violation.includes(`${operation.file}:${operation.name}`))
     ) {
       violations.push(

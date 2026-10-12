@@ -352,7 +352,7 @@ it.each(["() => readKernel()", "function () { return readKernel(); }"])(
     });
     expect(result.operations.has(kernelFile)).toBe(false);
     expect(result.operations.has(secondFile)).toBe(false);
-    expect(result.violations).toEqual([expect.stringContaining(`${secondFile}:${second}:`)]);
+    expect(result.violations).toEqual([]);
   },
 );
 
@@ -364,6 +364,22 @@ it("keeps unregistered nondeprecated receiver factories live", () => {
   });
   expect(result.operations.has(kernelFile)).toBe(false);
   expect(result.operations.has("src/receiver.ts")).toBe(false);
+  expect(result.violations).toEqual([]);
+});
+
+it("retains a receiver escaped by a deprecated wrapper without inventing a factory caller", () => {
+  const result = inspect({
+    [secondFile]: receiverOwner,
+    [kernelFile]: kernel,
+    [legacyFile]: `import { ${second} } from '../sessions/session-upstream-links.js';
+      /** @deprecated Use workers. */
+      export function ${first}() {
+        const receiver = ${second}();
+        register(receiver.read);
+      }`,
+  });
+  expect(result.operations.has(kernelFile)).toBe(false);
+  expect(result.operations.has(secondFile)).toBe(false);
   expect(result.violations).toEqual([]);
 });
 
@@ -431,7 +447,24 @@ it.each([
   });
   expect(result.operations.has(kernelFile)).toBe(false);
   expect(result.operations.has(secondFile)).toBe(false);
-  expect(result.violations).toEqual([expect.stringContaining(`${secondFile}:${second}:`)]);
+  expect(result.violations).toEqual([]);
+});
+
+it("rejects a deprecated factory reached through a live receiver method", () => {
+  const result = inspect({
+    [secondFile]: `import { createReceiver } from '../receiver.js';
+      /** @deprecated Use workers. */
+      export function ${second}() { return createReceiver(); }`,
+    [kernelFile]: kernel,
+    "src/receiver.ts": `import { readKernel } from './session-kernel.js';
+      import { ${first} } from './plugin-sdk/sqlite-runtime-legacy.js';
+      export function createReceiver() {
+        return { read() { ${first}(); return readKernel(); } };
+      }
+      export async function createReceiverAsync() { return createReceiver(); }`,
+  });
+  expect(result.operations.has(legacyFile)).toBe(false);
+  expect(result.violations).toEqual([expect.stringContaining(`${legacyFile}:${first}:`)]);
 });
 
 it("records SQL inside a closed receiver method as compatibility-only", () => {
