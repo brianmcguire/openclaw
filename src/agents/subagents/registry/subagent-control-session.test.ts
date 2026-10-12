@@ -30,60 +30,79 @@ it.each([
     killed: false,
   },
   { name: "fully legacy", current: "replacement", expected: "original", killed: true },
-])("checks legacy Stop identity: $name", async ({ recorded, current, expected, killed }) => {
-  const sessionKey = "agent:main:subagent:legacy-stop";
-  const runId = "legacy-stop";
-  const storePath = await writeSubagentSessionEntry({
-    stateDir: fixture.stateDir,
-    agentId: "main",
-    sessionKey,
-    defaultSessionId: current,
-  });
-  await addSubagentRunForTests({
-    runId,
-    childSessionKey: sessionKey,
-    childAgentId: "main",
-    requesterSessionKey: "agent:main:main",
-    childSessionIdentity: recorded ? { sessionId: recorded } : undefined,
-    execution: {
-      status: "running",
-      ...(expected
-        ? { transcriptTarget: { agentId: "main", sessionKey, sessionId: expected, storePath } }
-        : {}),
-    },
-  });
-  const before = structuredClone(getSubagentRunByRunId(runId));
-  const scope = { agentId: "main", storePath, sessionKey };
-  const sessionBefore = loadSessionEntry(scope);
-  const executionSessionId = expected ?? current;
-  const abort = vi.fn();
-  const handle = createEmbeddedRunHandle({ runId, abort });
-  abort.mockImplementation(() => clearActiveEmbeddedRun(executionSessionId, handle, sessionKey));
-  setActiveEmbeddedRun(executionSessionId, handle, sessionKey, undefined, "main");
-  try {
-    const result = await killSubagentRunAdmin({
-      cfg: { session: { store: storePath } },
-      sessionKey,
+  {
+    // A target for another child key is inapplicable; the worker-read current session decides.
+    name: "matching current despite another child's target",
+    recorded: "original",
+    current: "original",
+    expected: "other",
+    expectedKey: "agent:main:subagent:other-child",
+    killed: true,
+  },
+])(
+  "checks legacy Stop identity: $name",
+  async ({ recorded, current, expected, expectedKey, killed }) => {
+    const sessionKey = "agent:main:subagent:legacy-stop";
+    const runId = "legacy-stop";
+    const storePath = await writeSubagentSessionEntry({
+      stateDir: fixture.stateDir,
       agentId: "main",
-      expectedRunId: runId,
+      sessionKey,
+      defaultSessionId: current,
     });
-    expect(result).toMatchObject({ found: true, killed, cascadeKilled: 0 });
-    expect(abort).toHaveBeenCalledTimes(killed ? 1 : 0);
-    if (killed) {
-      expect(getSubagentRunByRunId(runId)).toMatchObject({
-        endedReason: SUBAGENT_ENDED_REASON_KILLED,
-        execution: { status: "terminal", suppressSessionEffects: true },
+    await addSubagentRunForTests({
+      runId,
+      childSessionKey: sessionKey,
+      childAgentId: "main",
+      requesterSessionKey: "agent:main:main",
+      childSessionIdentity: recorded ? { sessionId: recorded } : undefined,
+      execution: {
+        status: "running",
+        ...(expected
+          ? {
+              transcriptTarget: {
+                agentId: "main",
+                sessionKey: expectedKey ?? sessionKey,
+                sessionId: expected,
+                storePath,
+              },
+            }
+          : {}),
+      },
+    });
+    const before = structuredClone(getSubagentRunByRunId(runId));
+    const scope = { agentId: "main", storePath, sessionKey };
+    const sessionBefore = loadSessionEntry(scope);
+    const executionSessionId = expectedKey ? current : (expected ?? current);
+    const abort = vi.fn();
+    const handle = createEmbeddedRunHandle({ runId, abort });
+    abort.mockImplementation(() => clearActiveEmbeddedRun(executionSessionId, handle, sessionKey));
+    setActiveEmbeddedRun(executionSessionId, handle, sessionKey, undefined, "main");
+    try {
+      const result = await killSubagentRunAdmin({
+        cfg: { session: { store: storePath } },
+        sessionKey,
+        agentId: "main",
+        expectedRunId: runId,
       });
-    } else {
-      expect(result).toHaveProperty(
-        "error",
-        expect.stringContaining("incarnation is unresolved or changed"),
-      );
-      expect(getSubagentRunByRunId(runId)).toEqual(before);
+      expect(result).toMatchObject({ found: true, killed, cascadeKilled: 0 });
+      expect(abort).toHaveBeenCalledTimes(killed ? 1 : 0);
+      if (killed) {
+        expect(getSubagentRunByRunId(runId)).toMatchObject({
+          endedReason: SUBAGENT_ENDED_REASON_KILLED,
+          execution: { status: "terminal", suppressSessionEffects: true },
+        });
+      } else {
+        expect(result).toHaveProperty(
+          "error",
+          expect.stringContaining("incarnation is unresolved or changed"),
+        );
+        expect(getSubagentRunByRunId(runId)).toEqual(before);
+      }
+      expect(loadSessionEntry(scope)).toEqual(sessionBefore);
+      expect(fixture.cleanup).not.toHaveBeenCalled();
+    } finally {
+      clearActiveEmbeddedRun(executionSessionId, handle, sessionKey);
     }
-    expect(loadSessionEntry(scope)).toEqual(sessionBefore);
-    expect(fixture.cleanup).not.toHaveBeenCalled();
-  } finally {
-    clearActiveEmbeddedRun(executionSessionId, handle, sessionKey);
-  }
-});
+  },
+);

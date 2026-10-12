@@ -117,8 +117,8 @@ export async function prepareSubagentKillSession(
   };
   const legacySession = !requesterOwnedRun?.childSessionIdentity?.sessionId
     ? prepareLegacySession()
-    : expected?.sessionId
-      ? prepareLegacySession({ sessionId: expected.sessionId })
+    : selected?.sessionId
+      ? prepareLegacySession({ sessionId: selected.sessionId })
       : undefined;
   if (legacySession) {
     return legacySession;
