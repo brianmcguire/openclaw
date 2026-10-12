@@ -49,6 +49,28 @@ export function captureSessionAbortRequestFilter(
         !(params.preserveSideRuns && identity.turnKind === "btw")));
 }
 
+export function captureSessionAbortRequestOrigin(
+  params: Pick<ChatSessionAbortParams, "session" | "requiredSessionId" | "sessionId">,
+  acceptsRequest: SubagentRequestSessionOrigin["acceptsRequest"],
+): SubagentRequestSessionOrigin | undefined {
+  const session = params.session?.ok ? params.session.value : undefined;
+  return session?.entry &&
+    (params.requiredSessionId === undefined ||
+      session.entry.sessionId === params.requiredSessionId) &&
+    (params.sessionId === undefined || session.entry.sessionId === params.sessionId)
+    ? {
+        target: {
+          agentId: session.agentId,
+          storePath: session.storePath,
+          sessionKey: session.canonicalKey,
+          sessionId: session.entry.sessionId,
+          lifecycleRevision: session.entry.lifecycleRevision ?? null,
+        },
+        acceptsRequest,
+      }
+    : undefined;
+}
+
 type PreRegisteredAgentDedupePayload = {
   goalFingerprint?: unknown;
   agentId?: unknown;
