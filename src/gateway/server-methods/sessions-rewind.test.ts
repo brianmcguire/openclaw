@@ -713,6 +713,11 @@ describe("session message-cut methods", () => {
     );
     expect(mocks.readMediaBuffer).toHaveBeenCalledTimes(4);
     expect(loadSessionEntry({ agentId: "main", sessionKey })?.sandboxMode).toBe("off");
+    expect(
+      listSessionEntriesCore({ agentId: "main" })
+        .map((row) => row.sessionKey)
+        .toSorted(),
+    ).toEqual([sessionKey, forkKey ?? ""].toSorted());
   });
 
   it.each([
