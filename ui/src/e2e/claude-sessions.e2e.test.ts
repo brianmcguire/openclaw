@@ -94,7 +94,10 @@ async function triggerClaudeCatalogTerminal(page: Page, options: { force?: boole
     hasText: "Native Claude terminal",
   });
   await row.click({ button: "right", force: options.force });
-  await page.locator('wa-dropdown-item[value="terminal"]').click({ force: options.force });
+  await page
+    .locator("openclaw-catalog-session-menu")
+    .getByRole("menuitem", { name: "Open in terminal", exact: true })
+    .click({ force: options.force });
 }
 
 async function openClaudeCatalogTerminal(page: Page) {
@@ -350,10 +353,11 @@ suite.define(() => {
         title: "claude --resume claude-termi…",
       });
       await expect.poll(() => connecting.count()).toBe(1);
+      const terminalOutput = "Claude Code ready\r\n";
       await gateway.emitGatewayEvent("terminal.data", {
         sessionId: "claude-terminal-e2e",
-        seq: 17,
-        data: "Claude Code ready\r\n",
+        seq: terminalOutput.length,
+        data: terminalOutput,
       });
       await expect.poll(() => connecting.count()).toBe(0);
       expect(await page.locator(".tabstrip-tab.is-live").count()).toBe(1);

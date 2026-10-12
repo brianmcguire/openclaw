@@ -108,22 +108,53 @@ describe("runCronIsolatedAgentTurn isolated session identity", () => {
     }
   });
 
-  it.each(["agent:default:harness:codex:supervision:native-thread"])(
-    "rejects detached execution for a missing reserved harness key %s",
-    async (sessionKey) => {
-      await expect(
-        runCronIsolatedAgentTurn(
-          makeIsolatedAgentParamsFixture({
-            sessionKey,
-            job: makeIsolatedAgentJobFixture({ sessionTarget: `session:${sessionKey}` }),
-          }),
-        ),
-      ).rejects.toThrow(/reserved for agent harness-owned sessions/i);
-
-      expect(resolveCronSessionMock).toHaveBeenCalledOnce();
-      expect(runEmbeddedAgentMock).not.toHaveBeenCalled();
+  it.each([
+    {
+      name: "missing harness",
+      key: "harness:codex:supervision:native-thread",
+      locked: false,
+      error: /reserved for agent harness-owned sessions/i,
     },
-  );
+    {
+      name: "locked harness",
+      key: "harness:codex:supervision:native-thread",
+      locked: true,
+      error: /reserved for agent harness-owned sessions/i,
+    },
+    {
+      name: "locked ordinary",
+      key: "project-native-session",
+      locked: true,
+      error: /identity is locked and cannot be replaced or shared/i,
+    },
+  ])("rejects detached execution for a $name session", async ({ key, locked, error }) => {
+    const sessionKey = `agent:default:${key}`;
+    if (locked) {
+      const entry = makeCronSessionEntry({
+        agentHarnessId: "codex",
+        modelSelectionLocked: true,
+        sessionId: "native-session",
+      });
+      resolveCronSessionMock.mockReturnValue(
+        makeCronSession({
+          initialSessionEntry: entry,
+          isNewSession: false,
+          sessionEntry: entry,
+          store: { [sessionKey]: entry },
+        }),
+      );
+    }
+    await expect(
+      runCronIsolatedAgentTurn(
+        makeIsolatedAgentParamsFixture({
+          sessionKey,
+          job: makeIsolatedAgentJobFixture({ sessionTarget: `session:${sessionKey}` }),
+        }),
+      ),
+    ).rejects.toThrow(error);
+    expect(resolveCronSessionMock).toHaveBeenCalledOnce();
+    expect(runEmbeddedAgentMock).not.toHaveBeenCalled();
+  });
 
   it("continues a pre-existing unlocked harness-prefixed session as an ordinary session", async () => {
     const sessionKey = "agent:default:harness:legacy-notes";
@@ -158,63 +189,6 @@ describe("runCronIsolatedAgentTurn isolated session identity", () => {
       sessionId: "legacy-session",
     });
     expect(cleanupBrowserSessionsForLifecycleEndMock).not.toHaveBeenCalled();
-  });
-
-  it("rejects detached execution for an existing locked harness session", async () => {
-    const sessionKey = "agent:default:harness:codex:supervision:native-thread";
-    const protectedEntry = makeCronSessionEntry({
-      agentHarnessId: "codex",
-      modelSelectionLocked: true,
-      sessionId: "native-session",
-    });
-    resolveCronSessionMock.mockReturnValue(
-      makeCronSession({
-        initialSessionEntry: protectedEntry,
-        isNewSession: false,
-        sessionEntry: protectedEntry,
-        store: { [sessionKey]: protectedEntry },
-      }),
-    );
-
-    await expect(
-      runCronIsolatedAgentTurn(
-        makeIsolatedAgentParamsFixture({
-          sessionKey,
-          job: makeIsolatedAgentJobFixture({ sessionTarget: `session:${sessionKey}` }),
-        }),
-      ),
-    ).rejects.toThrow(/reserved for agent harness-owned sessions/i);
-
-    expect(runEmbeddedAgentMock).not.toHaveBeenCalled();
-  });
-
-  it("rejects detached execution for an existing locked ordinary session", async () => {
-    const sessionKey = "agent:default:project-native-session";
-    const protectedEntry = makeCronSessionEntry({
-      agentHarnessId: "codex",
-      modelSelectionLocked: true,
-      sessionId: "native-session",
-    });
-    resolveCronSessionMock.mockReturnValue(
-      makeCronSession({
-        initialSessionEntry: protectedEntry,
-        isNewSession: false,
-        sessionEntry: protectedEntry,
-        store: { [sessionKey]: protectedEntry },
-      }),
-    );
-
-    await expect(
-      runCronIsolatedAgentTurn(
-        makeIsolatedAgentParamsFixture({
-          sessionKey,
-          job: makeIsolatedAgentJobFixture({ sessionTarget: `session:${sessionKey}` }),
-        }),
-      ),
-    ).rejects.toThrow(/identity is locked and cannot be replaced or shared/i);
-
-    expect(resolveCronSessionMock).toHaveBeenCalledOnce();
-    expect(runEmbeddedAgentMock).not.toHaveBeenCalled();
   });
 
   it("uses a run-scoped key for CLI isolated cron execution", async () => {
@@ -326,6 +300,13 @@ describe("runCronIsolatedAgentTurn — skill filter", () => {
 
     expect(result.status).toBe("error");
     expect(result.error).toContain("turn/start rejected before result metadata");
+    expect(await patchSessionEntryMock.mock.results[0]?.value).toMatchObject({
+      systemSent: true,
+      skillsSnapshot: {
+        prompt: "<available_skills></available_skills>",
+        version: 42,
+      },
+    });
     expect(persistedAtStartup.get("agent:main:cron:test")).toMatchObject({
       sessionId: "test-session-id",
       agentHarnessId: "codex",
@@ -352,7 +333,7 @@ describe("runCronIsolatedAgentTurn — skill filter", () => {
     );
 
     await runSkillFilterCase({
-      cfg: { agents: { list: [{ id: "weather-bot", skills: ["weather", "meme-factory"] }] } },
+      cfg: { agents: { entries: { "weather-bot": { skills: ["weather", "meme-factory"] } } } },
       agentId: "weather-bot",
     });
     expect(buildWorkspaceSkillSnapshotMock).not.toHaveBeenCalled();
