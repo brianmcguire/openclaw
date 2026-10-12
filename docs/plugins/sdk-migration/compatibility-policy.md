@@ -92,6 +92,15 @@ offsets for `isInsideCode`. Regions returned by `findCodeRegions` additionally
 include parser-owned `block` metadata; callers supplying their own ranges do not
 need to provide it.
 
+### Session header link helper
+
+`createSessionHeaderLink` from `openclaw/plugin-sdk/control-ui` shipped in
+OpenClaw 2026.10.1 and is deprecated. Session conversation links were retired,
+so hosts no longer pass `props.session` to `session-header` accessories. The
+helper still mounts, but its link never renders. Plugins built against
+2026.10.1 keep loading. Render a custom accessory instead. The
+`plugin-sdk-session-header-link` record allows removal after 2027-01-12.
+
 ### Harness tool construction
 
 Harnesses should await `params.hostCapabilities.createToolSurfaceAsync(options,
@@ -156,9 +165,10 @@ and caller authority remain required at the effect. Custom released service obje
 retain their own explicitly selected compatibility contracts; the built-in Gateway
 never falls back to native SQL. See [placement preparation](/plugins/sdk-migration/how-to-migrate#await-placement-preparation).
 
-`githubPublicationService.deferOrphanedRequests()` now warns and throws with
-migration guidance; await `deferOrphanedRequestsAsync()` instead. These changes
-preserve schemas, stored data, retention, durability, and update behavior.
+`githubPublicationService.deferOrphanedRequests()` retains its `void` signature
+but now fails at invocation; use `await deferOrphanedRequestsAsync()` to defer
+orphaned requests. Other deprecated publication methods likewise retain their
+signatures only for migration discovery and fail with replacement guidance.
 
 GitHub publication's opaque requester and synchronous lifecycle methods, plus
 personal OAuth `cancelAuthorization` and `disconnect`, share the
