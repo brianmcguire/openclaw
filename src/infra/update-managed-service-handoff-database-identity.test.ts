@@ -11,7 +11,10 @@ import {
 import { prepareManagedHandoffLeaseStore } from "./update-managed-service-handoff-lease.js";
 
 const dirs = useAutoCleanupTempDirTracker(afterEach);
-afterEach(() => vi.unstubAllEnvs());
+afterEach(() => {
+  vi.unstubAllEnvs();
+  vi.restoreAllMocks();
+});
 
 function fixture() {
   const root = fs.realpathSync(dirs.make("handoff-identity-"));
@@ -138,6 +141,31 @@ it("keeps nested prepared writers for different databases independently scoped",
     expect(paths.map((file) => fs.existsSync(file + ".lock"))).toEqual([true, false]);
   });
   expect(paths.map((file) => fs.existsSync(file + ".lock"))).toEqual([false, false]);
+});
+
+it("preserves a bound ordinary-path receipt when native resolution expands its parent", async () => {
+  const directory = fs.realpathSync(dirs.make("handoff-bound-parent-"));
+  const parent = path.join(directory, "private");
+  const canonical = path.join(parent, "handoffs.sqlite");
+  const initial = await prepareManagedHandoffLeaseDatabase(canonical);
+  initial(true, () => undefined);
+  const alias = path.join(directory, "alias");
+  fs.symlinkSync(directory, alias, process.platform === "win32" ? "junction" : "dir");
+  const databasePath = path.join(alias, "private", "handoffs.sqlite");
+  const ordinaryRealpath = fs.realpathSync;
+  // Windows ordinary realpath can retain an 8.3 spelling. Keep the genuine
+  // native resolver and Root; only model that already-recorded path spelling.
+  vi.spyOn(fs, "realpathSync").mockImplementation((...args) => {
+    const resolved = ordinaryRealpath(...args);
+    return args[0] === databasePath && typeof resolved === "string" ? databasePath : resolved;
+  });
+  fs.realpathSync.native = ordinaryRealpath.native;
+  const identity = captureManagedUpdateLeaseDatabaseIdentity(databasePath);
+  expect(identity.databasePath).toBe(databasePath);
+  const pinned = await prepareManagedHandoffLeaseDatabase(databasePath, identity);
+  pinned(true, () => undefined);
+  expect(captureManagedUpdateLeaseDatabaseIdentity(databasePath)).toEqual(identity);
+  expect(fs.existsSync(canonical + ".lock")).toBe(false);
 });
 
 it.skipIf(process.platform === "win32")(

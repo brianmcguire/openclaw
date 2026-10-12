@@ -107,9 +107,11 @@ export async function prepareManagedHandoffLeaseDatabase(
   if (existingIdentity) {
     assertManagedUpdateLeaseDatabaseIdentity(existingIdentity);
   }
-  // Original acquisition pins this canonical parent before reentering its writer.
-  // Preserve the leaf so unsafe-file recovery never follows a database symlink.
-  const canonicalPath = path.join(lockRoot.rootReal, path.basename(databasePath));
+  // Canonicalize unbound admissions before original acquisition reenters its writer.
+  // Keep earned pins exact and leave unsafe database leaves for no-follow recovery.
+  const canonicalPath = existingIdentity
+    ? databasePath
+    : path.join(lockRoot.rootReal, path.basename(databasePath));
   return createManagedHandoffLeaseDatabase(canonicalPath, existingIdentity, lockRoot);
 }
 
