@@ -423,7 +423,15 @@ export function inspectDatabaseWorkerCompatibility(
     }
     const found = new Set<CompatibilityOperation>();
     contained.set(symbol, found);
-    const direct = registered.get(symbol);
+    // Instantiated receiver properties retain their declaration, but get a new symbol.
+    const declaration = symbol.valueDeclaration?.resolve();
+    const direct =
+      registered.get(symbol) ??
+      (declaration
+        ? declarations.get(
+            ts.isPropertyAssignment(declaration) ? declaration.initializer : declaration,
+          )
+        : undefined);
     if (direct) {
       found.add(direct);
     } else if (symbol.flags & SymbolFlags.Module) {
