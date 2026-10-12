@@ -2,6 +2,7 @@ import { asOptionalRecord } from "@openclaw/normalization-core/record-coerce";
 import { resolveProviderRequestHeaders } from "../agents/provider-request-config.js";
 import type {
   ProviderCatalogContext,
+  ProviderCatalogOutcome,
   ProviderCatalogResult,
   ProviderPlugin,
 } from "../plugins/types.js";
@@ -379,7 +380,6 @@ function resolveFixedLiveModelDiscoveryEndpoint(
 }
 
 type OpenAICompatibleLiveModelProviderParams = {
-  configuredModels?: ProviderCatalogContext["configuredModels"];
   providerId: string;
   providerConfig: ModelProviderConfig;
   apiKey?: string;
@@ -457,34 +457,28 @@ export async function buildOpenAICompatibleLiveProviderCatalog(
     return { provider: discovery.provider };
   }
   const run = async () => {
-    let unlistedConfiguredModelIds: string[] = [];
+    let modelIdCatalog: ProviderCatalogOutcome["modelIdCatalog"];
     const projectRows = discovery.request.projectRows;
     const provider = await buildLiveModelProviderConfig({
       ...discovery.request,
       projectRows: (rows, fallback) => {
-        const listed = new Set(rows.map(readOpenAICompatibleLiveModelId).filter(Boolean));
-        unlistedConfiguredModelIds = (params.configuredModels ?? [])
-          .filter(
-            (model) =>
-              normalizeProviderId(model.provider) === normalizeProviderId(params.providerId) &&
-              (!model.baseUrl ||
-                model.baseUrl.replace(/\/+$/, "") === fallback.baseUrl.replace(/\/+$/, "")) &&
-              !listed.has(model.modelId.trim()),
-          )
-          .map((model) => model.modelId);
+        modelIdCatalog = {
+          baseUrl: fallback.baseUrl,
+          modelIds: rows.map(readOpenAICompatibleLiveModelId).filter((id) => id !== undefined),
+        };
         return projectRows(rows, fallback);
       },
     });
     return {
       provider,
-      ...(unlistedConfiguredModelIds.length
+      ...(modelIdCatalog
         ? {
             outcomes: [
               {
                 provider: params.providerId,
                 profileId: discovery.profileId,
                 status: "ready" as const,
-                unlistedConfiguredModelIds,
+                modelIdCatalog,
               },
             ],
           }
@@ -525,7 +519,6 @@ export function buildOpenAICompatibleProviderFamilyCatalog(params: {
             id,
             result: await buildOpenAICompatibleLiveProviderCatalog({
               providerId: id,
-              configuredModels: ctx.configuredModels,
               providerConfig: buildProvider(),
               apiKey: auth.apiKey,
               discoveryApiKey: auth.discoveryApiKey,
@@ -571,7 +564,6 @@ export async function buildOpenAICompatibleProviderCatalog(
     return result;
   }
   return await buildOpenAICompatibleLiveProviderCatalog({
-    configuredModels: params.ctx.configuredModels,
     providerId: params.providerId,
     providerConfig: result.provider,
     apiKey: auth.apiKey,

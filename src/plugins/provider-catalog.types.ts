@@ -11,6 +11,8 @@ export type { ProviderCatalogOutcome } from "./provider-catalog-outcome.js";
 
 export type ProviderCatalogOrder = "simple" | "profile" | "paired" | "late";
 
+export type ProviderConfiguredModelRef = { provider: string; modelId: string; baseUrl?: string };
+
 export type ProviderCatalogContext = {
   /** Acquisition lifetime; release awaited work and join its cleanup when aborted. */
   signal?: AbortSignal;
@@ -20,8 +22,6 @@ export type ProviderCatalogContext = {
   env: NodeJS.ProcessEnv;
   /** Normalized provider identities selected for this catalog owner; absent means the full catalog. */
   providerIds?: readonly string[];
-  /** Resolved authored selections/declarations for this config generation, not static catalog ids. */
-  configuredModels?: readonly { provider: string; modelId: string; baseUrl?: string }[];
   resolveProviderApiKey: (providerId?: string) => {
     apiKey: string | undefined;
     discoveryApiKey?: string;
@@ -61,6 +61,11 @@ export type ProviderCatalogResult =
 export type ProviderPluginCatalog = {
   order?: ProviderCatalogOrder;
   run: (ctx: ProviderCatalogContext) => Promise<ProviderCatalogResult>;
+  /** Pure advisory projection; skip other endpoints and never perform discovery or I/O. */
+  getUnlistedConfiguredModelIds?: (
+    catalog: NonNullable<ProviderCatalogOutcome["modelIdCatalog"]>,
+    configuredModels: readonly ProviderConfiguredModelRef[],
+  ) => readonly string[];
 };
 
 export type UnifiedModelCatalogProviderContext = ProviderCatalogContext & {

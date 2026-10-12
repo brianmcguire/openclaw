@@ -165,7 +165,9 @@ configured model ID that the server did not list. `models list` warns to pull or
 download the model on that server,
 or fix its configured name, then run `openclaw models list --refresh`.
 `models status` and Doctor's `core/doctor/model-references` check read the same
-prepared Gateway facts without starting provider discovery. Their warnings do
+prepared Gateway facts without starting provider discovery. Editing configured model
+references recomputes these warnings against the retained listing on hot reload;
+no restart or catalog refresh is needed unless the server inventory changed. Their warnings do
 not change model availability, configuration validity, or selection. Offline
 servers and catalogs that have not been discovered produce no missing-ID warning.
 When the Gateway is stopped, Doctor and status have no live inventory to compare;

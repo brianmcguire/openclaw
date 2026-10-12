@@ -129,7 +129,6 @@ export function normalizePluginDiscoveryResult(params: {
 export async function runProviderCatalog(params: {
   provider: ProviderPlugin;
   providerIds?: readonly string[];
-  configuredModels?: ProviderCatalogContext["configuredModels"];
   /** Captured catalog identities; the hook still receives its original provider scope. */
   normalizeProviderForScope?: (provider: string) => string;
   config: OpenClawConfig;
@@ -147,7 +146,6 @@ export async function runProviderCatalog(params: {
   }
   const result = await hook.run({
     config: params.config,
-    configuredModels: params.configuredModels,
     agentDir: params.agentDir,
     workspaceDir: params.workspaceDir,
     env: params.env,

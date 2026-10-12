@@ -102,7 +102,6 @@ async function resolveStepFunCatalog(
   const baseUrl = explicitBaseUrl ?? provider.baseUrls[region ?? "intl"];
   const providerConfig = provider.buildProvider(baseUrl);
   return await buildOpenAICompatibleLiveProviderCatalog({
-    configuredModels: ctx.configuredModels,
     discoveryMode: "strict",
     providerId: params.providerId,
     providerConfig,

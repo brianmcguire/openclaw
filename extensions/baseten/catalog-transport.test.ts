@@ -160,10 +160,6 @@ describe("Baseten sparse live model transport", () => {
     }
     const result = await provider.catalog.run({
       config: { agents: { defaults: { model: "baseten/chat-typo" } } },
-      configuredModels: ["chat-local", "chat-typo"].map((modelId) => ({
-        provider: "baseten",
-        modelId,
-      })),
       env: {},
       resolveProviderApiKey: () => ({ apiKey: TEST_VALUE }),
       resolveProviderAuth: () => ({
@@ -179,7 +175,10 @@ describe("Baseten sparse live model transport", () => {
         provider: "baseten",
         profileId: "baseten:fixture",
         status: "ready",
-        unlistedConfiguredModelIds: ["chat-typo"],
+        modelIdCatalog: {
+          baseUrl: expect.any(String),
+          modelIds: ["chat-local"],
+        },
       },
     ]);
     expect(fetchMock).toHaveBeenCalledOnce();

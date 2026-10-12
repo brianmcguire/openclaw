@@ -44,7 +44,7 @@ function buildFetchGuard(body: unknown): {
 
 describe("provider-catalog-live-runtime", () => {
   it.each(["id", "model", "model_name", "modelName"])(
-    "diagnoses configured ids using raw %s identities before chat filtering",
+    "retains raw %s identities for read-time diagnostics before chat filtering",
     async (idField) => {
       const { fetchGuard, fetchGuardMock } = buildFetchGuard({
         data: [
@@ -62,16 +62,16 @@ describe("provider-catalog-live-runtime", () => {
           baseUrl: "http://127.0.0.1:1234/v1",
           models: [],
         },
-        configuredModels: [
-          ...["chat-local", "local/chat-local", "embed-local", "chat-typo"].map((modelId) => ({
-            provider: "local",
-            modelId,
-          })),
-          { provider: "local", modelId: "other-server", baseUrl: "http://other.test/v1" },
-        ],
       });
       expect(result?.outcomes).toEqual([
-        { provider: "local", status: "ready", unlistedConfiguredModelIds: ["chat-typo"] },
+        {
+          provider: "local",
+          status: "ready",
+          modelIdCatalog: {
+            baseUrl: "http://127.0.0.1:1234/v1",
+            modelIds: ["chat-local", "local/chat-local", "embed-local"],
+          },
+        },
       ]);
       expect(result).toMatchObject({
         provider: {

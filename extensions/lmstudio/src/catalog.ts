@@ -2,21 +2,17 @@ import { isNonSecretApiKeyMarker } from "openclaw/plugin-sdk/provider-auth";
 import { runLiveProviderCatalog } from "openclaw/plugin-sdk/provider-catalog-live-runtime";
 import type {
   ProviderCatalogContext,
+  ProviderCatalogOutcome,
   ProviderCatalogResult,
 } from "openclaw/plugin-sdk/provider-catalog-shared";
 import type { ModelProviderConfig } from "openclaw/plugin-sdk/provider-model-shared";
+import { normalizeUniqueTrimmedStringList } from "openclaw/plugin-sdk/string-coerce-runtime";
 import {
   LMSTUDIO_DEFAULT_API_KEY_ENV_VAR,
   LMSTUDIO_PROVIDER_ID as PROVIDER_ID,
 } from "./defaults.js";
 import { discoverLmstudioModels } from "./models.fetch.js";
-import {
-  normalizeLmstudioModelKey,
-  type LmstudioModelWire,
-  resolveLmstudioCanonicalModelKey,
-  resolveLmstudioInferenceBase,
-  resolveLmstudioServerBase,
-} from "./models.js";
+import { resolveLmstudioInferenceBase } from "./models.js";
 import {
   hasLmstudioAuthorizationHeader,
   resolveLmstudioProviderAuthMode,
@@ -84,54 +80,42 @@ export async function discoverLmstudioProvider(
       ? profileId
       : undefined;
   const run = async () => {
-    let unlistedConfiguredModelIds: string[] = [];
+    let modelIdCatalog: ProviderCatalogOutcome["modelIdCatalog"];
     const models =
       !options && explicit?.models?.length
         ? explicit.models
         : await discoverLmstudioModels({
-            ...(ctx.configuredModels?.length
-              ? {
-                  onListedModels: (rows: LmstudioModelWire[]) => {
-                    unlistedConfiguredModelIds = (ctx.configuredModels ?? [])
-                      .filter((model) => {
-                        if (
-                          model.provider !== PROVIDER_ID ||
-                          (model.baseUrl &&
-                            resolveLmstudioServerBase(model.baseUrl) !==
-                              resolveLmstudioServerBase(baseUrl))
-                        ) {
-                          return false;
-                        }
-                        const modelKey = normalizeLmstudioModelKey(model.modelId);
-                        const canonicalKey = resolveLmstudioCanonicalModelKey({
-                          modelKey,
-                          models: rows,
-                        });
-                        return !rows.some(
-                          (row) =>
-                            row.key?.trim() === canonicalKey ||
-                            row.loaded_instances?.some(
-                              (instance) => instance?.id?.trim() === modelKey,
-                            ),
-                        );
-                      })
-                      .map((model) => model.modelId);
-                  },
-                }
-              : {}),
+            onListedModels: (rows) => {
+              modelIdCatalog = {
+                baseUrl,
+                modelIds: normalizeUniqueTrimmedStringList(
+                  rows.flatMap((row) => [
+                    row.key,
+                    ...(row.loaded_instances?.map((instance) => instance?.id) ?? []),
+                  ]),
+                ),
+                aliases: normalizeUniqueTrimmedStringList(
+                  rows.flatMap((row) =>
+                    row.key?.trim()
+                      ? [row.selected_variant, ...normalizeUniqueTrimmedStringList(row.variants)]
+                      : [],
+                  ),
+                ),
+              };
+            },
             baseUrl,
             apiKey: resolvedDiscoveryApiKey ?? "",
             headers: resolvedHeaders,
             quiet,
             ...(!quiet && options ? options : {}),
           });
-    const outcomes = unlistedConfiguredModelIds.length
+    const outcomes = modelIdCatalog
       ? [
           {
             provider: PROVIDER_ID,
             profileId: catalogProfileId,
             status: "ready" as const,
-            unlistedConfiguredModelIds,
+            modelIdCatalog,
           },
         ]
       : undefined;

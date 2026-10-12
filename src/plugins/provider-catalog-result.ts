@@ -128,7 +128,10 @@ export function copyProviderCatalogOutcomes(
     const status = readRecordValue(entry, "status");
     const rawModelOrder = readRecordValue(entry, "modelOrder");
     const rawListedModelIds = readRecordValue(entry, "listedModelIds");
-    const unlistedConfiguredModelIds = readRecordValue(entry, "unlistedConfiguredModelIds");
+    const modelIdCatalog = readRecordValue(entry, "modelIdCatalog");
+    const catalogBaseUrl = readRecordValue(modelIdCatalog, "baseUrl");
+    const catalogModelIds = readRecordValue(modelIdCatalog, "modelIds");
+    const catalogAliases = readRecordValue(modelIdCatalog, "aliases");
     if (
       typeof provider !== "string" ||
       provider.trim().length === 0 ||
@@ -158,8 +161,14 @@ export function copyProviderCatalogOutcomes(
         ...(ready && Array.isArray(rawListedModelIds)
           ? { listedModelIds: copyModelIds(rawListedModelIds) }
           : {}),
-        ...(ready && Array.isArray(unlistedConfiguredModelIds)
-          ? { unlistedConfiguredModelIds: copyModelIds(unlistedConfiguredModelIds) }
+        ...(ready && typeof catalogBaseUrl === "string" && Array.isArray(catalogModelIds)
+          ? {
+              modelIdCatalog: {
+                baseUrl: catalogBaseUrl,
+                modelIds: copyModelIds(catalogModelIds),
+                ...(Array.isArray(catalogAliases) ? { aliases: copyModelIds(catalogAliases) } : {}),
+              },
+            }
           : {}),
       },
     ];
