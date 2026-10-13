@@ -232,6 +232,7 @@ enum ExecApprovalEvaluator {
         agentId: String?,
         skillBinsCache: SkillBinsCache = .shared) async -> ExecApprovalEvaluation
     {
+        let searchPaths = await CommandResolver.preferredPathsAsync()
         let effectiveCwd = ExecCommandResolution.canonicalApprovalCwd(cwd)
         let trimmedAgent = agentId?.trimmingCharacters(in: .whitespacesAndNewlines)
         let normalizedAgentId = (trimmedAgent?.isEmpty == false) ? trimmedAgent : nil
@@ -239,7 +240,10 @@ enum ExecApprovalEvaluator {
         let security = approvals.agent.security
         let ask = approvals.agent.ask
         let shellWrapper = ExecShellWrapperParser.extract(command: command, rawCommand: rawCommand).isWrapper
-        let env = HostEnvSanitizer.sanitize(overrides: envOverrides, shellWrapper: shellWrapper)
+        let env = HostEnvSanitizer.sanitize(
+            searchPaths: searchPaths,
+            overrides: envOverrides,
+            shellWrapper: shellWrapper)
         let effectiveDisplayCommand = displayCommand ??
             ExecCommandFormatter.displayString(for: command, rawCommand: rawCommand)
         let allowlistRawCommand = ExecSystemRunCommandValidator.allowlistEvaluationRawCommand(
