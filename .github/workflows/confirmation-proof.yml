@@ -1,0 +1,48 @@
+name: PR 171129 isolated confirmation proof
+on:
+  push:
+    branches: [proof/updates-confirmation-171129]
+permissions:
+  contents: read
+jobs:
+  capture:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          path: proof-runner
+      - uses: actions/checkout@v4
+        with:
+          repository: openclaw/openclaw
+          ref: 50a441dea2b457f17651f7b81f5f066b2ca60d56
+          persist-credentials: false
+          path: source
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24.21.0
+      - name: Install pinned dependencies without lifecycle scripts
+        working-directory: source
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = 50a441dea2b457f17651f7b81f5f066b2ca60d56
+          corepack enable
+          corepack prepare "$(node -p 'require("./package.json").packageManager')" --activate
+          pnpm install --frozen-lockfile --ignore-scripts
+      - name: Capture the actual routed confirmation and cancel
+        working-directory: source
+        env:
+          OPENCLAW_UI_E2E_ARTIFACT_DIR: ${{ github.workspace }}/proof-results
+          OPENCLAW_UI_E2E_SKIP_REAL_GATEWAY: '1'
+        run: |
+          set -euo pipefail
+          cp ../proof-runner/proof/confirmation.e2e.test.ts ui/src/e2e/pr171129-confirmation.e2e.test.ts
+          pnpm test:ui:e2e ui/src/e2e/pr171129-confirmation.e2e.test.ts
+      - name: Retain screenshots and diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: updates-confirmation-171129
+          path: proof-results/
+          retention-days: 14
