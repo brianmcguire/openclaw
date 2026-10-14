@@ -46,7 +46,17 @@ jobs:
           CODESIGN_TIMESTAMP: 'off'
         run: |
           set -euo pipefail
-          /bin/bash scripts/package-mac-app.sh > ../proof-results/package.log 2>&1
+          # This credentialless job traces build substeps, never the later auth proof.
+          task_trace_file="$RUNNER_TEMP/openclaw-build-trace.sh"
+          printf '%s\n' 'set -x' > "$task_trace_file"
+          BASH_ENV="$task_trace_file" /bin/bash scripts/package-mac-app.sh 2>&1 | tee ../proof-results/package.log
+          /usr/bin/ditto -c -k --sequesterRsrc --keepParent dist/OpenClaw.app ../macos-path-candidate.zip
+      - name: Retain candidate bundle for proof recovery
+        uses: actions/upload-artifact@v4
+        with:
+          name: macos-path-candidate-564e4b3f
+          path: macos-path-candidate.zip
+          retention-days: 3
       - name: Exercise stable and candidate native app execution
         run: python3 proof-runner/proof/native_app.py source/dist/OpenClaw.app proof-results
       - name: Upload scoped proof and diagnostics
