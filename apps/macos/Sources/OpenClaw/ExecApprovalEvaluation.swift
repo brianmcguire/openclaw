@@ -223,6 +223,9 @@ struct ExecApprovalExecutionCommit: Sendable {
 }
 
 enum ExecApprovalEvaluator {
+    /// Discover once per app lifetime; relaunch after changing tool installation folders.
+    private static let searchPaths = Task { await CommandResolver.preferredPathsAsync() }
+
     static func evaluate(
         command: [String],
         rawCommand: String?,
@@ -232,7 +235,7 @@ enum ExecApprovalEvaluator {
         agentId: String?,
         skillBinsCache: SkillBinsCache = .shared) async -> ExecApprovalEvaluation
     {
-        let searchPaths = await CommandResolver.preferredPathsAsync()
+        let searchPaths = await self.searchPaths.value
         let effectiveCwd = ExecCommandResolution.canonicalApprovalCwd(cwd)
         let trimmedAgent = agentId?.trimmingCharacters(in: .whitespacesAndNewlines)
         let normalizedAgentId = (trimmedAgent?.isEmpty == false) ? trimmedAgent : nil

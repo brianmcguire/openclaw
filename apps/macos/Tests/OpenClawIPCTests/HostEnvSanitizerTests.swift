@@ -1,3 +1,4 @@
+import Foundation
 import Testing
 @testable import OpenClaw
 
@@ -5,20 +6,35 @@ struct HostEnvSanitizerTests {
     private static let searchPaths = ["/usr/bin", "/bin"]
 
     @Test(arguments: [false, true])
-    func `app owned search paths replace inherited path and reject request overrides`(shellWrapper: Bool) {
-        let searchPaths = ["/app-owned/bin", "/usr/bin"]
-        let inherited = HostEnvSanitizer.sanitize(
-            searchPaths: searchPaths,
-            overrides: nil,
-            shellWrapper: shellWrapper)
-        let overridden = HostEnvSanitizer.sanitize(
-            searchPaths: searchPaths,
-            overrides: ["PATH": "/request-owned/bin", "Path": "/request-owned/bin"],
-            shellWrapper: shellWrapper)
+    func `app owned paths resolve local helpers and reject request overrides`(shellWrapper: Bool) throws {
+        let home = try makeTempDirForTests()
+        defer { try? FileManager.default.removeItem(at: home) }
+        let helper = home.appendingPathComponent(".local/bin/openclaw-path-test-helper")
+        try makeExecutableForTests(at: helper)
+        let searchPaths = CommandResolver.preferredPaths(
+            home: home,
+            current: ["/usr/bin", "/bin"],
+            projectRoot: home,
+            profile: AppProfile(environment: [:]))
+        let command = shellWrapper
+            ? ["/bin/sh", "-c", "openclaw-path-test-helper"]
+            : ["openclaw-path-test-helper"]
 
-        #expect(inherited["PATH"] == "/app-owned/bin:/usr/bin")
-        #expect(overridden["PATH"] == "/app-owned/bin:/usr/bin")
-        #expect(overridden["Path"] == nil)
+        for overrides in [nil, ["PATH": "/request-owned/bin", "Path": "/request-owned/bin"]] {
+            let env = HostEnvSanitizer.sanitize(
+                searchPaths: searchPaths,
+                overrides: overrides,
+                shellWrapper: shellWrapper)
+            let resolutions = ExecCommandResolution.resolveForAllowlist(
+                command: command,
+                rawCommand: nil,
+                cwd: home.path,
+                env: env)
+
+            #expect(resolutions.count == 1)
+            #expect(resolutions.first?.resolvedPath == helper.path)
+            #expect(env["Path"] == nil)
+        }
     }
 
     @Test(arguments: ["cat", ""])
