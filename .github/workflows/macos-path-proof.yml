@@ -46,6 +46,29 @@ jobs:
           CODESIGN_TIMESTAMP: 'off'
         run: |
           set -euo pipefail
+          # Match the Apple Git environment where this exact verifier passes locally.
+          mkdir -p ../proof-tools
+          ln -s /usr/bin/git ../proof-tools/git
+          export PATH="$PWD/../proof-tools:$PATH"
+          git --version | tee ../proof-results/git-version.txt
+          python3 - <<'PY' 2>&1 | tee ../proof-results/git-preflight.log
+          import os, signal, subprocess
+          command = '''set -euo pipefail
+          ROOT_DIR="$PWD"
+          SWIFT_PACKAGE_ROOT="$PWD/apps/macos"
+          source scripts/lib/mac-swift-build.sh
+          run_with_locked_swift_packages swift package --package-path apps/macos --scratch-path apps/macos/.build/arm64 resolve --force-resolved-versions
+          compiled_peekaboo_commit apps/macos/.build/arm64/checkouts/Peekaboo e060b6ba21792b327ce2a10368f57c8e569dc712
+          '''
+          process = subprocess.Popen(['/bin/bash', '-c', command], start_new_session=True)
+          try:
+              status = process.wait(timeout=300)
+          except subprocess.TimeoutExpired:
+              os.killpg(process.pid, signal.SIGKILL)
+              process.wait()
+              raise SystemExit('Source-integrity preflight exceeded five minutes; packaging not started')
+          raise SystemExit(status)
+          PY
           # This credentialless job traces build substeps, never the later auth proof.
           task_trace_file="$RUNNER_TEMP/openclaw-build-trace.sh"
           printf '%s\n' 'set -x' > "$task_trace_file"
