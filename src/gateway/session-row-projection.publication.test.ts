@@ -5,10 +5,8 @@ import {
   loadSessionEntry,
   replaceSessionEntrySync,
 } from "../config/sessions/session-accessor.js";
-import {
-  readCommittedSessionEntryCache,
-  readSessionEntryCache,
-} from "../config/sessions/session-accessor.sqlite-entry-cache.js";
+import { readSessionEntryCache } from "../config/sessions/session-accessor.sqlite-entry-cache.js";
+import { readCommittedSessionEntryCache } from "../config/sessions/session-accessor.sqlite-entry-cache.test-support.js";
 import { recordSessionParticipant } from "../config/sessions/session-accessor.sqlite-participants.native.js";
 import { runSqliteSessionReclamation } from "../config/sessions/session-accessor.sqlite-reclamation-run.js";
 import { createSessionMaintenanceFinalizationOperation } from "../config/sessions/session-accessor.sqlite-reclamation.js";
@@ -383,7 +381,7 @@ it("publishes maintenance removals before row listeners recreate the key", async
       expect(readCommittedSessionEntryCache(database.db)?.get(scope.sessionKey)?.sessionId).toBe(
         "removed",
       );
-      await runSqliteSessionReclamation({ forceInProcess: false, plan, diagnostics });
+      await runSqliteSessionReclamation({ plan, diagnostics });
       expect(diagnostics).toMatchObject({ workerThreadId: expect.any(Number) });
       expect(callbackErrors).toEqual([]);
       expect(identities).toEqual(["delete:removed", "create:replacement"]);

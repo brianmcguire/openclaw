@@ -33,7 +33,7 @@ Workboard sidebar entries offer pin/unpin and, with write access, confirmed boar
     - Tool activity counts distinct calls, not start/update/result events, repeated history or live projections, or Gateway observation RPCs. Nested calls count independently, even when their names and arguments match. Expand the activity to see each call; read and edit counts can include repeated attempts on the same file.
     - Tool activity automatically displays a short purpose description supplied by the acting agent when available, with commands and results expandable underneath. Calls without descriptions keep deterministic labels. Viewing activity makes no additional model calls. The former `gateway.controlUi.toolTitles` option is retired; `openclaw doctor --fix` removes it from existing configs.
     - Start or dismiss ephemeral model-suggested follow-up tasks. **Start in a new session** opens the proposed task in the suggested folder without requiring Git or creating a worktree. The new session asks the user before using a worktree if the task needs one later.
-    - Activity tab with browser-local, redaction-first summaries of live tool activity from existing `session.tool` / tool event delivery.
+    - Activity tab with browser-local, bounded summaries of live tool activity from existing `session.tool` / tool event delivery.
 
   </Accordion>
   <Accordion title="Channels, sessions, memory">
@@ -113,6 +113,7 @@ Workboard sidebar entries offer pin/unpin and, with write access, confirmed boar
     - If a selected session is deleted and recreated, its new details replace the old ones and clear the previous timeline interval without clearing your session selection. An unfinished drag on the old timeline cannot change the new interval. Refreshing the same instance retains its selected interval. Context details from a different session instance show an error and can be retried with **Refresh**.
     - The overview loads session summaries first. Full system-prompt breakdowns load when you select a session; the `has:context` filter still works before opening details.
     - Sessions CSV and JSON exports include only selected sessions that match the active filters; with no selection, they include all matching sessions. JSON exports keep the displayed usage snapshot and load prompt details for the same session instance. If that session has been replaced, refresh Usage and export again.
+    - CSV and JSON exports require complete usage data for the exported sessions. A complete explicit selection can be exported while other sessions are still computing. If the selected data is incomplete, the export shows an error instead of downloading partial totals. Refresh Usage and try again, or narrow the date range.
 
   </Accordion>
   <Accordion title="Debug, logs, update">

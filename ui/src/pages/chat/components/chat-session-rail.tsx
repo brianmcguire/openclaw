@@ -1,6 +1,6 @@
 import "../../../styles/chat/session-rail.css";
 import "./chat-comment-controller.ts";
-import { createEffect, createMemo, createSignal, For, Show, untrack } from "solid-js";
+import { createEffect, createMemo, createSignal, For, Show, onCleanup, untrack } from "solid-js";
 import type { SessionObserverDigest } from "../../../../../packages/gateway-protocol/src/schema/sessions.js";
 import type { ControlUiSessionPullRequest } from "../../../../../src/gateway/control-ui-contract.js";
 import type { ChatSendShortcut } from "../../../app/settings.ts";
@@ -48,7 +48,7 @@ const COMPANION_HINT_KEYS = {
   Parameters<typeof t>[0]
 >;
 
-export type ChatSessionRailProps = {
+type ChatSessionRailProps = {
   sessionKey: string;
   digest: SessionObserverDigest | null;
   running: boolean;
@@ -67,7 +67,7 @@ export type ChatSessionRailProps = {
 };
 export type ChatSessionRailElement = SolidBridgeElement<ChatSessionRailProps>;
 
-export function ChatSessionRailContent(props: ChatSessionRailProps) {
+function ChatSessionRailContent(props: ChatSessionRailProps) {
   let region!: HTMLElement;
   let thread!: HTMLDivElement;
   const blocks = markdownBlocksRef(() => props.presented);
@@ -119,12 +119,19 @@ export function ChatSessionRailContent(props: ChatSessionRailProps) {
   // The pane consumes its focus intent only when it publishes a new request.
   const focusRequest = createMemo(() => props.focusRequest);
   createEffect(focusRequest, (request) => {
-    const requested = request?.();
-    if (untrack(() => props.presented) && requested) {
-      region
-        .querySelector<HTMLTextAreaElement>(".chat-session-rail__input:not(:disabled)")
-        ?.focus({ preventScroll: true });
+    if (!request) {
+      return;
     }
+    // The full-width mobile panel must commit before its input can take focus.
+    // Consume the pane's live intent after that commit, not while still hidden.
+    const frame = requestAnimationFrame(() => {
+      if (untrack(() => props.presented) && request()) {
+        region
+          .querySelector<HTMLTextAreaElement>(".chat-session-rail__input:not(:disabled)")
+          ?.focus({ preventScroll: true });
+      }
+    });
+    onCleanup(() => cancelAnimationFrame(frame));
   });
   const scrollKey = createMemo(() =>
     JSON.stringify(props.companion.turns.map((turn) => [turn.question, turn.status])),
@@ -314,29 +321,25 @@ export function ChatSessionRailContent(props: ChatSessionRailProps) {
   );
 }
 
-export const ChatSessionRail = defineSolidBridge<ChatSessionRailProps>(
-  "openclaw-chat-session-rail",
-  ChatSessionRailContent,
-  {
-    properties: {
-      sessionKey: { default: "", attribute: false },
-      digest: { default: null, attribute: false },
-      running: { default: false, attribute: false },
-      activeRunId: { default: null, attribute: false },
-      pullRequests: { default: [], attribute: false },
-      companion: { default: { turns: [], loading: false, draft: "" }, attribute: false },
-      connected: { default: false, attribute: false },
-      sendShortcut: { default: "enter", attribute: false },
-      onSubmit: { default: undefined, attribute: false },
-      onDraftChange: { default: undefined, attribute: false },
-      onAttachmentsChange: { default: undefined, attribute: false },
-      attachmentLimits: { default: undefined, attribute: false },
-      uploadConfig: { default: undefined, attribute: false },
-      presented: { default: false, type: Boolean },
-      focusRequest: { default: undefined, attribute: false },
-    },
+defineSolidBridge<ChatSessionRailProps>("openclaw-chat-session-rail", ChatSessionRailContent, {
+  properties: {
+    sessionKey: { default: "", attribute: false },
+    digest: { default: null, attribute: false },
+    running: { default: false, attribute: false },
+    activeRunId: { default: null, attribute: false },
+    pullRequests: { default: [], attribute: false },
+    companion: { default: { turns: [], loading: false, draft: "" }, attribute: false },
+    connected: { default: false, attribute: false },
+    sendShortcut: { default: "enter", attribute: false },
+    onSubmit: { default: undefined, attribute: false },
+    onDraftChange: { default: undefined, attribute: false },
+    onAttachmentsChange: { default: undefined, attribute: false },
+    attachmentLimits: { default: undefined, attribute: false },
+    uploadConfig: { default: undefined, attribute: false },
+    presented: { default: false, type: Boolean },
+    focusRequest: { default: undefined, attribute: false },
   },
-);
+});
 
 declare module "@solidjs/web" {
   namespace JSX {

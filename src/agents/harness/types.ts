@@ -250,6 +250,8 @@ export type AgentHarnessSideQuestionParams = {
     resolvedApiKey?: string;
   };
   question: string;
+  /** Preserve tool definitions but reject all tool execution in this side question. */
+  toolCalls?: "deny";
   images?: import("../../llm/types.js").ImageContent[];
   sessionEntry: import("../../config/sessions.js").SessionEntry;
   sessionStore?: Record<string, import("../../config/sessions.js").SessionEntry>;
@@ -410,6 +412,13 @@ export type AgentHarnessSessionDeletionParams = {
   assertCurrent: () => void;
 };
 
+/**
+ * Direct, unbound commit/rollback callbacks are deprecated and will be removed
+ * after an announced stable deprecation period. Use createNativeSessionBindingLifecycleV2 for
+ * reversible stored bindings or createNativeSessionCommitFinalizer for
+ * commit-only cleanup from openclaw/plugin-sdk/agent-harness-session-runtime.
+ * Factory-produced participants remain supported by this contract.
+ */
 export type AgentHarnessSessionDeletionMutation = {
   /**
    * @deprecated Opaque callbacks run after durable session commit. Use
@@ -455,6 +464,30 @@ export type AgentHarnessModelCatalogResult =
       outcomes?: readonly import("../../plugins/provider-catalog-outcome.js").ProviderCatalogOutcome[];
     };
 
+export type AgentHarnessDescendantCancellationResult = {
+  killed: number;
+  /** Settlement failures do not erase already acknowledged sibling cancellations. */
+  errors?: readonly unknown[];
+  cancelledRequesters: Array<{
+    agentId: string;
+    sessionKey: string;
+    sessionId: string;
+    lifecycleRevision?: string;
+    requesterTurnRunId: string;
+  }>;
+};
+
+/** Activation-only native readiness check; it does not authorize a model turn. */
+export type AgentHarnessSetupVerificationContext = {
+  config: OpenClawConfig;
+  provider: string;
+  modelId: string;
+  workspaceDir: string;
+  signal: AbortSignal;
+  /** Revalidate the setup owner after awaits and before native I/O. */
+  assertCurrent: () => void;
+};
+
 type AgentHarnessContract<
   TAttemptParams extends AgentHarnessAttemptParams = AgentHarnessAttemptParams,
   TSideQuestionParams extends AgentHarnessSideQuestionParams = AgentHarnessSideQuestionParams,
@@ -498,8 +531,15 @@ type AgentHarnessContract<
   conversationToolPolicyNativeTools?: readonly string[];
   supports(ctx: AgentHarnessSupportContext): AgentHarnessSupport;
   /**
+   * Verify a profileless, harness-owned setup candidate without a model turn.
+   * Resolve only after native credentials and the selected model are usable;
+   * throw on rejection. Core owns the resulting setup binding and rechecks it
+   * before activation. Other inference checks still execute a bounded turn.
+   */
+  verifySetup?(ctx: AgentHarnessSetupVerificationContext): Promise<void>;
+  /**
    * Synchronous private ownership read; no discovery, auth loading, or native connection setup.
-   * @deprecated Implement resolveSessionRuntimeOwnershipAsync; removed in the next Plugin SDK major.
+   * @deprecated Implement resolveSessionRuntimeOwnershipAsync; removal follows a stable deprecation period.
    */
   resolveSessionRuntimeOwnership?(params: {
     config?: OpenClawConfig;
@@ -569,6 +609,17 @@ type AgentHarnessContract<
 
   /** Throw AgentHarnessSessionCleanupError when required cleanup must block session replacement. */
   reset?(params: AgentHarnessResetParams): Promise<void> | void;
+  /** Reserve descendants before parent Stop; cancel joins native terminal and delivery custody. */
+  withDescendantCancellation?<T>(
+    this: void,
+    params: Omit<AgentHarnessSessionDeletionParams, "initialization"> & {
+      requesterTurnRunId?: string;
+      acceptsRequest: (
+        custody: import("../../infra/exec-request-context.js").ExecRequestCustody | undefined,
+      ) => boolean;
+    },
+    run: (cancel: () => Promise<AgentHarnessDescendantCancellationResult>) => Promise<T>,
+  ): Promise<T>;
   /** Invalidate native context only when a same-key history cut commits; preserve compaction. */
   withSessionContextReset?<T>(
     this: void,

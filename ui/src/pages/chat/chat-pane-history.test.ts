@@ -6,7 +6,7 @@ import { describe, expect, it, vi } from "vitest";
 import { createDeferred } from "../../../../test/helpers/promise.js";
 import type { GatewayBrowserClient } from "../../api/gateway.ts";
 import { extractText } from "../../lib/chat/message-extract.ts";
-import "./chat-pane.ts";
+import "./chat-pane.tsx";
 import { createComposerContainer } from "./chat-composer.test-support.ts";
 import { handleChatGatewayEvent } from "./chat-gateway.ts";
 import type { ChatHistoryResult } from "./chat-history-snapshot.ts";
@@ -413,7 +413,7 @@ describe("chat pane native history pagination", () => {
     expect(scrollToOffset).not.toHaveBeenCalled();
   });
 
-  it("bootstraps a visible history tail once the viewport can fit it", async () => {
+  it("fills a visible history tail once the viewport can fit it", async () => {
     const request = vi.fn(async () => ({
       messages: [nativeHistoryMessage(1), nativeHistoryMessage(2)],
       hasMore: false,
@@ -426,7 +426,7 @@ describe("chat pane native history pagination", () => {
     const thread = document.createElement("div");
     thread.className = "chat-thread";
     Object.defineProperty(thread, "scrollHeight", { value: 400 });
-    let clientHeight = 200;
+    let clientHeight = 0;
     Object.defineProperty(thread, "clientHeight", { get: () => clientHeight });
     const sentinel = document.createElement("div");
     sentinel.className = "chat-history-sentinel";
@@ -449,6 +449,8 @@ describe("chat pane native history pagination", () => {
     try {
       pane.syncHistoryObserver();
       expect(request).not.toHaveBeenCalled();
+      clientHeight = 200;
+      pane.syncHistoryObserver();
       clientHeight = 600;
       pane.syncHistoryObserver();
       await vi.waitFor(() => expect(request).toHaveBeenCalledOnce());
@@ -460,6 +462,25 @@ describe("chat pane native history pagination", () => {
       vi.unstubAllGlobals();
     }
   });
+
+  it.each(["initial placement", "programmatic reveal"])(
+    "does not arm history from an upward offset during %s",
+    (placement) => {
+      const { pane } = createTestChatPane({ client: createGatewayBrowserClientFixture() });
+      vi.spyOn(pane.transcript, "isPositionSettled", "get").mockReturnValue(
+        placement !== "initial placement",
+      );
+      vi.spyOn(pane.transcript, "isProgrammaticScroll", "get").mockReturnValue(
+        placement === "programmatic reveal",
+      );
+      const thread = appendChatThread(pane, { scrollTop: 80 });
+      pane.transcriptScrollTop = 100;
+      const event = new Event("scroll");
+      Object.defineProperty(event, "target", { value: thread });
+      pane.handleTranscriptScroll(event);
+      expect(pane.historyObserverArmed).toBe(false);
+    },
+  );
 
   it("prefetches older history from upward intent well before the top edge", async () => {
     const request = vi.fn(async () => ({
@@ -511,6 +532,7 @@ describe("chat pane native history pagination", () => {
       expect(request).toHaveBeenCalledWith("chat.history", {
         sessionKey: state.sessionKey,
         limit: 1000,
+        maxBytes: 1024 * 1024,
         toolResultMaxChars: 2_000,
         offset: 2,
       });
@@ -563,6 +585,7 @@ describe("chat pane native history pagination", () => {
     expect(request).toHaveBeenLastCalledWith("chat.history", {
       sessionKey: state.sessionKey,
       limit: 1000,
+      maxBytes: 1024 * 1024,
       toolResultMaxChars: 2_000,
       offset: 5,
     });
@@ -720,6 +743,7 @@ describe("chat pane native history pagination", () => {
     expect(request).toHaveBeenCalledWith("chat.history", {
       sessionKey: state.sessionKey,
       limit: 1000,
+      maxBytes: 1024 * 1024,
       toolResultMaxChars: 2_000,
       offset: 2,
     });
@@ -758,6 +782,7 @@ describe("chat pane native history pagination", () => {
     expect(request).toHaveBeenNthCalledWith(1, "chat.history", {
       sessionKey: state.sessionKey,
       limit: 1000,
+      maxBytes: 1024 * 1024,
       toolResultMaxChars: 2_000,
       offset: 2,
     });

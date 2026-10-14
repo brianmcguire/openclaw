@@ -7,6 +7,7 @@ import {
   type OpenClawStateDatabase,
 } from "../../state/openclaw-state-db.js";
 import { captureOpenClawStateWorkerContext } from "../../state/openclaw-state-worker-context.js";
+import { subscribePlacementChanges } from "./placement-authority-owner.js";
 import { createPlacementLifecycleWorkerOps } from "./placement-lifecycle-store.js";
 import type { WorkerSessionPlacementProjection } from "./placement-read-projection.types.js";
 import { readPublishedPlacementProjection } from "./placement-read-publication.js";
@@ -16,6 +17,7 @@ import {
   projectWorkerSessionTurnClaim,
   required,
   type WorkerSessionPlacementRecord,
+  type WorkerSessionPlacementIdentity,
   type WorkerSessionTurnClaim,
 } from "./placement-record.js";
 import type { WorkerSessionPlacementRetirement } from "./placement-retirement.js";
@@ -28,6 +30,7 @@ import {
   preparePlacementPreservationRead,
   preparePlacementTurnClaimAuthority,
   prepareSessionPlacementRead,
+  readPlacementRecoveryCandidates,
   readPlacementProjection,
   type PlacementTurnClaimAuthority,
 } from "./placement-turn-authority.js";
@@ -82,6 +85,9 @@ export function createWorkerSessionPlacementStore(
   };
 
   const store = {
+    subscribeChanges(listener: (placement: WorkerSessionPlacementIdentity) => void) {
+      return subscribePlacementChanges(context.admission.identity, listener);
+    },
     ...createPlacementReadStore({ path, withWorkspaceResultConflict }),
     ...createPlacementWorkspaceReservationOps(
       runtime,
@@ -321,15 +327,17 @@ export function createWorkerSessionPlacementStore(
     },
 
     async readRecoveryCandidates() {
-      const result = await executeExistingOpenClawStateRead(
-        { path },
-        { type: "workers.placementRecoveryCandidates" },
-        { current: true },
-      );
-      if (!result || !result.ok || result.type !== "workers.placementRecoveryCandidates") {
-        throw new Error("Worker placement recovery candidates source is unavailable");
-      }
-      return result.candidates;
+      return await readPlacementRecoveryCandidates(path, async () => {
+        const result = await executeExistingOpenClawStateRead(
+          { path },
+          { type: "workers.placementRecoveryCandidates" },
+          { current: true },
+        );
+        if (!result || !result.ok || result.type !== "workers.placementRecoveryCandidates") {
+          throw new Error("Worker placement recovery candidates source is unavailable");
+        }
+        return result.candidates;
+      });
     },
 
     /** @deprecated Await getManyAsync; retained through the next Plugin SDK major. */
