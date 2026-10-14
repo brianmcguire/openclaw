@@ -7,7 +7,7 @@ permissions:
 jobs:
   app-proof:
     runs-on: macos-26-intel
-    timeout-minutes: 60
+    timeout-minutes: 120
     steps:
       - uses: actions/checkout@v4
         with:
