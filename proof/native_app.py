@@ -10,6 +10,7 @@ import json
 import os
 from pathlib import Path
 import plistlib
+import platform
 import re
 import shutil
 import socket
@@ -23,6 +24,8 @@ assert sys.platform == "darwin"
 assert os.environ.get("GITHUB_ACTIONS") == "true"
 assert os.environ.get("RUNNER_ENVIRONMENT") == "github-hosted"
 assert os.environ.get("GITHUB_REPOSITORY") == "brianmcguire/openclaw"
+architecture = platform.machine()
+assert architecture in {"arm64", "x86_64"}
 candidate = Path(sys.argv[1]).resolve()
 out = Path(sys.argv[2]).resolve()
 out.mkdir(exist_ok=True)
@@ -37,6 +40,7 @@ tool.parent.mkdir(parents=True, exist_ok=True)
 tool.write_text('#!/bin/sh\nprintf "OPENCLAW_PATH_PROOF_OK\\n"\n')
 tool.chmod(0o755)
 results = {"candidateHead": "564e4b3f47709783ad44cf3742f889c105da86fb",
+           "architecture": architecture,
            "stable": "2026.10.3", "boundary": "authenticated native exec socket",
            "candidatePackaging": "debug, ad hoc, MLX helper omitted", "cases": []}
 owned_pid = None
@@ -149,7 +153,7 @@ def check(name, expect_success):
 try:
     dmg = out.parent / "stable-openclaw.dmg"
     url = ("https://github.com/openclaw/openclaw/releases/download/v2026.10.3/"
-           "OpenClaw-2026.10.3-arm64.dmg")
+           f"OpenClaw-2026.10.3-{architecture}.dmg")
     run(["/usr/bin/curl", "--fail", "--location", "--output", dmg, url])
     mount = out.parent / "stable-mount"
     mount.mkdir(exist_ok=True)
