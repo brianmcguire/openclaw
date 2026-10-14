@@ -1,0 +1,58 @@
+name: Isolated macOS PATH behavior proof
+on:
+  push:
+    branches: [proof/macos-exec-path-171460]
+permissions:
+  contents: read
+jobs:
+  app-proof:
+    runs-on: macos-26
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          path: proof-runner
+      - uses: actions/checkout@v4
+        with:
+          repository: brianmcguire/openclaw
+          ref: 564e4b3f47709783ad44cf3742f889c105da86fb
+          persist-credentials: false
+          path: source
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24.21.0
+      - name: Prepare pinned package manager and toolchain
+        working-directory: source
+        run: |
+          set -euo pipefail
+          corepack enable
+          corepack prepare "$(node -p 'require("./package.json").packageManager')" --activate
+          source scripts/lib/swift-toolchain.sh
+          select_xcode_toolchain
+          require_swift_toolchain
+          test "$(git rev-parse HEAD)" = 564e4b3f47709783ad44cf3742f889c105da86fb
+          mkdir -p ../proof-results
+          sw_vers > ../proof-results/platform.txt
+          swift --version >> ../proof-results/platform.txt
+      - name: Package candidate app from the reviewed commit
+        working-directory: source
+        env:
+          BUNDLE_ID: ai.openclaw.mac
+          BUILD_CONFIG: debug
+          BUILD_ARCHS: arm64
+          ALLOW_ADHOC_SIGNING: '1'
+          OPENCLAW_SKIP_MLX_TTS: '1'
+          CODESIGN_TIMESTAMP: 'off'
+        run: |
+          set -euo pipefail
+          /bin/bash scripts/package-mac-app.sh > ../proof-results/package.log 2>&1
+      - name: Exercise stable and candidate native app execution
+        run: python3 proof-runner/proof/native_app.py source/dist/OpenClaw.app proof-results
+      - name: Upload scoped proof and diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: macos-path-proof-171460
+          path: proof-results/
+          retention-days: 14
