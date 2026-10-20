@@ -615,7 +615,7 @@ struct AuthenticatedControlUIWebView: UIViewRepresentable {
         configuration.preferences.javaScriptCanOpenWindowsAutomatically = false
         context.coordinator.installUserScripts(in: configuration.userContentController)
         if let deviceSettingsBridge {
-            configuration.userContentController.add(
+            configuration.userContentController.addScriptMessageHandler(
                 deviceSettingsBridge, contentWorld: .page, name: IOSDeviceSettingsBridge.messageHandlerName)
         }
 
