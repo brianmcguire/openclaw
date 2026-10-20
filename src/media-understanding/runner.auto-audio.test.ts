@@ -1,10 +1,12 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { ProviderAuthError } from "../agents/model-auth-runtime-shared.js";
 import { hasAvailableAuthForProvider, resolveApiKeyForProviderCore } from "../agents/model-auth.js";
+import { createProviderHttpError } from "../agents/provider-http-errors.js";
 import type { OpenClawConfig } from "../config/types.js";
 import { withTestDir } from "../test-helpers/temp-dir.js";
 import { withEnvAsync } from "../test-utils/env.js";
 import { createWhisperExecutable } from "./local-audio.test-support.js";
+import { formatDecisionSummary } from "./runner.entries.js";
 import { buildProviderRegistry, runCapability } from "./runner.js";
 import { withAudioFixture, withMediaFixture } from "./runner.test-utils.js";
 import type { AudioTranscriptionRequest, MediaUnderstandingProvider } from "./types.js";
@@ -110,7 +112,14 @@ describe("runCapability audio", () => {
     "retries failed uploads only with an explicit fallback list: %s",
     async (explicit) => {
       hasAuth.mockClear();
-      const rejected = new Error("Audio transcription failed (HTTP 403)");
+      const rejected = await createProviderHttpError(
+        Response.json(
+          { detail: "Synthetic provider response body" },
+          { status: 403, headers: { "request-id": "synthetic-request-id" } },
+        ),
+        "Audio transcription failed",
+        { statusPrefix: "HTTP " },
+      );
       const transcribeAudio = vi.fn(async () => ({ text: "authored fallback transcript" }));
       const result = await runAudio({
         cfg: explicit
@@ -141,6 +150,9 @@ describe("runCapability audio", () => {
       if (!explicit) {
         expect(result.outputs).toEqual([]);
         expect(hasAuth).not.toHaveBeenCalled();
+        expect(formatDecisionSummary(result.decision)).toBe(
+          "audio: failed (0/1) reason=Audio transcription failed (HTTP 403)",
+        );
       }
     },
   );

@@ -195,7 +195,7 @@ export function normalizeDecisionReason(reason?: string): string | undefined {
   if (!trimmed) {
     return undefined;
   }
-  const normalized = trimmed.replace(/^Error:\s*/i, "").trim();
+  const normalized = trimmed.replace(/^(?:Error|ProviderHttpError):\s*/i, "").trim();
   return normalized || undefined;
 }
 
