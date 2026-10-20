@@ -14,7 +14,9 @@ struct SettingsProxyAuthenticationTests {
     func `embedded Settings authenticates its document resources and WebSocket using stored Basic credentials`() async throws {
         let identity = try Self.fixtureIdentity()
         var authorizedTargets: Set<String> = []
+        var observedCredentials: [String: [String]] = [:]
         let authorization = "Basic " + Data("fixture:synthetic-password".utf8).base64EncodedString()
+        var expectedAuthorization = authorization
         let server = try await DashboardHTTPFixture.start(
             tlsIdentity: identity.network,
             rawResponseHandler: { request in
@@ -26,7 +28,8 @@ struct SettingsProxyAuthenticationTests {
                         headers[String(parts[0]).lowercased()] = parts[1].trimmingCharacters(in: .whitespaces)
                     }
                 }
-                guard headers["authorization"] == authorization else {
+                observedCredentials[target, default: []].append(headers["authorization"] ?? "")
+                guard headers["authorization"] == expectedAuthorization else {
                     return Self.response(
                         status: "401 Unauthorized",
                         headers: "WWW-Authenticate: Basic realm=\"fixture\"\r\n")
@@ -42,6 +45,7 @@ struct SettingsProxyAuthenticationTests {
                 if target == "/resource.js" {
                     return Self.response(contentType: "text/javascript", body: "window.resourceLoaded = true;")
                 }
+                if target.hasPrefix("/probe-") { return Self.response(body: "ok") }
                 return Self.response(body: """
                 <!doctype html><script src="/resource.js"></script><script>
                 window.socketResult = 'pending';
@@ -99,6 +103,33 @@ struct SettingsProxyAuthenticationTests {
         #expect(try await webView.evaluateJavaScript("window.resourceLoaded === true") as? Bool == true)
         #expect(try await webView.evaluateJavaScript("window.socketResult") as? String == "ok")
         #expect(authorizedTargets == ["/settings", "/resource.js", "/socket"])
+
+        // Keep the same document and WebKit network session after changing the real Keychain owner.
+        #expect(GatewaySettingsStore.clearGatewayCustomHeaders(gatewayStableID: config.effectiveStableID))
+        #expect(try await webView.callAsyncJavaScript(
+            "return await fetch('/probe-cleared', {cache: 'no-store'}).then(r => r.status);",
+            arguments: [:], in: nil, contentWorld: .page) as? Int == 401)
+        #expect(try await Self.probeWebSocket(in: webView, path: "/probe-socket-cleared") == "error")
+        for path in ["/probe-cleared", "/probe-socket-cleared"] {
+            let credentials = try #require(observedCredentials[path])
+            #expect(!credentials.isEmpty && credentials.allSatisfy(\.isEmpty))
+        }
+
+        let replacement = "Basic " + Data("replacement:synthetic-second".utf8).base64EncodedString()
+        #expect(GatewaySettingsStore.saveGatewayCustomHeaders(
+            ["Authorization": replacement], gatewayStableID: config.effectiveStableID))
+        expectedAuthorization = replacement
+        #expect(try await webView.callAsyncJavaScript(
+            "return await fetch('/probe-replaced', {cache: 'no-store'}).then(r => r.status);",
+            arguments: [:], in: nil, contentWorld: .page) as? Int == 200)
+        #expect(try await Self.probeWebSocket(in: webView, path: "/probe-socket-replaced") == "ok")
+        for path in ["/probe-replaced", "/probe-socket-replaced"] {
+            let credentials = try #require(observedCredentials[path])
+            #expect(credentials.contains(replacement))
+            #expect(!credentials.contains(authorization))
+        }
+        print("Settings Basic auth transport: document/resource/WebSocket authenticated; " +
+            "removed credential absent from HTTP/WebSocket; replacement used without old credential.")
     }
 
     @Test func `Basic challenge credentials are read only for the configured secure origin and first attempt`() throws {
@@ -172,6 +203,16 @@ struct SettingsProxyAuthenticationTests {
         let otherGateway = Self.config(url: config.url)
         #expect(AuthenticatedControlUI.basicProxyCredential(config: otherGateway) == nil)
         #expect(AuthenticatedControlUI.basicProxyCredential(config: nil) == nil)
+    }
+
+    private static func probeWebSocket(in webView: WKWebView, path: String) async throws -> String? {
+        try await webView.callAsyncJavaScript("""
+        return await new Promise(resolve => {
+          const socket = new WebSocket('wss://' + location.host + path);
+          socket.onmessage = () => { socket.close(); resolve('ok'); };
+          socket.onerror = () => { socket.close(); resolve('error'); };
+        });
+        """, arguments: ["path": path], in: nil, contentWorld: .page) as? String
     }
 
     private static func config(
