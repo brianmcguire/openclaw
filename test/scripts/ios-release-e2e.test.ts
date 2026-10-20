@@ -176,6 +176,7 @@ const expectFixtures = (proof: Record<string, unknown>, fields: Record<string, u
   expect(proof.fixtures).toEqual(fixtureEvidence(fields));
 const rpcEvidence = (responseReceived: boolean) =>
   matching({
+    attempts: 1,
     authenticated: true,
     dispatchEntered: true,
     responseReceived,
@@ -911,8 +912,11 @@ it.each([
           message: "private handshake failure",
           connectionDetails: { url: "ws://private", urlSource: "private", message: "private" },
           code: 1008,
-          reason: scenario === "setup-code-closed-unknown-dispatch" ? "private" : "invalid-handshake",
-          ...(scenario === "setup-code-closed-unknown-dispatch" ? {} : { requestDispatched: false }),
+          reason:
+            scenario === "setup-code-closed-unknown-dispatch" ? "private" : "invalid-handshake",
+          ...(scenario === "setup-code-closed-unknown-dispatch"
+            ? {}
+            : { requestDispatched: false }),
         });
       }
     }
@@ -1472,12 +1476,12 @@ it.each([
       expect(setupCodeAttempts).toBe(attempts);
       expectFixtures(proof, {
         cleanupConfirmed: true,
-        setupRpc: {
+        setupRpc: matching({
           attempts,
           authenticated: recovered || dispatched,
           dispatchEntered: recovered || dispatched,
           responseReceived: recovered,
-        },
+        }),
       });
       expectTrial(report, { status: recovered ? "passed" : "failed" });
       if (!recovered && !cancelled) {
@@ -1509,6 +1513,7 @@ it.each([
       const authenticated = auth !== false;
       expectFixtures(proof, {
         setupRpc: {
+          attempts: 1,
           authenticated,
           dispatchEntered: authenticated,
           responseReceived: success,
@@ -1731,7 +1736,12 @@ it.each([
           ...(scenario === "setup-code-timeout" ? { errorCode: "ETIMEDOUT" } : {}),
           context:
             scenario === "setup-code-rpc-timeout"
-              ? ["rpc-authenticated:true", "rpc-dispatch-entered:true"]
+              ? [
+                  "rpc-attempts:1",
+                  "rpc-transport-kind:timeout",
+                  "rpc-authenticated:true",
+                  "rpc-dispatch-entered:true",
+                ]
               : [],
         }),
       ]);
