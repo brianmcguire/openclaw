@@ -205,7 +205,7 @@ export function summarizeDecisionReason(reason?: string): string | undefined {
   if (!normalized) {
     return undefined;
   }
-  return normalized.split(":")[0]?.trim() || undefined;
+  return normalized.split(/:|\s+\[request_id=/)[0]?.trim() || undefined;
 }
 
 function assertMinAudioSize(params: { size: number; attachmentIndex: number }): void {

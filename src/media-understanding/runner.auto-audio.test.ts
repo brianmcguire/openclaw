@@ -108,14 +108,21 @@ describe("runCapability audio", () => {
     expect(transcribeAudioWithContext).toHaveBeenCalledTimes(1);
   });
 
-  it.each([false, true])(
-    "retries failed uploads only with an explicit fallback list: %s",
-    async (explicit) => {
+  it.each([
+    { explicit: false, withBody: true },
+    { explicit: true, withBody: true },
+    { explicit: false, withBody: false },
+  ])(
+    "retries failed uploads only with an explicit fallback list: $explicit, body: $withBody",
+    async ({ explicit, withBody }) => {
       hasAuth.mockClear();
       const rejected = await createProviderHttpError(
-        Response.json(
-          { detail: "Synthetic provider response body" },
-          { status: 403, headers: { "request-id": "synthetic-request-id" } },
+        new Response(
+          withBody ? JSON.stringify({ detail: "Synthetic provider response body" }) : null,
+          {
+            status: 403,
+            headers: { "request-id": "synthetic-request-id" },
+          },
         ),
         "Audio transcription failed",
         { statusPrefix: "HTTP " },
