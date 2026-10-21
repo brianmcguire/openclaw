@@ -1,0 +1,39 @@
+name: Windows readiness investigation 178898
+
+on:
+  push:
+    branches: [proof/178898-windows-readiness]
+
+permissions:
+  contents: read
+
+jobs:
+  reproduce:
+    if: github.repository == 'brianmcguire/openclaw'
+    runs-on: windows-2025
+    timeout-minutes: 20
+    steps:
+      - name: Check out pinned upstream source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: openclaw/openclaw
+          ref: 0e3aaad0c2e813af45c455a98f902afd223cf1ac
+          persist-credentials: false
+      - name: Prepare the maintained test runtime
+        uses: ./.github/actions/setup-node-env
+        with:
+          node-version: 24.21.0
+          install-bun: "false"
+          cache-mode: "off"
+      - name: Record the proof environment
+        shell: bash
+        run: |
+          git rev-parse HEAD
+          node --version
+          pnpm --version
+          node -e 'console.log(JSON.stringify({ platform: process.platform, arch: process.arch, cpus: require("node:os").availableParallelism(), memoryBytes: require("node:os").totalmem() }))'
+      - name: Exercise native Gateway startup and cron identity
+        shell: bash
+        env:
+          OPENCLAW_VITEST_RUNTIME: node
+        run: node scripts/run-vitest.mjs src/gateway/gateway-cron-process-identity.windows.test.ts --maxWorkers=1
