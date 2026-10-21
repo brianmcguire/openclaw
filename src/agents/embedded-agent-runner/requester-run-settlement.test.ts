@@ -2,6 +2,7 @@ import { beforeEach, expect, it, onTestFinished, vi } from "vitest";
 import {
   mergeAcceptedSessionSpawnsForRun,
   retireAcceptedSessionSpawnCompletionForRun,
+  type AcceptedSessionSpawn,
 } from "../accepted-session-spawn.js";
 import { prepareSystemAgentRunAdmission as prepareAdmission } from "../admitted-run-context.js";
 import { settleFailedRequesterRun, settleRequesterRun } from "../requester-run-settlement.js";
@@ -15,7 +16,7 @@ vi.mock("../subagents/registry/subagent-registry.js", () => ({
 
 const assertCurrent = vi.fn();
 const requester = { sessionKey: "agent:main:main", agentId: "main", runId: "parent" };
-const acceptedSessionSpawns = [
+const acceptedSessionSpawns: [AcceptedSessionSpawn] = [
   { runId: "child", childSessionKey: "agent:main:subagent:child", expectsCompletionMessage: true },
 ];
 
