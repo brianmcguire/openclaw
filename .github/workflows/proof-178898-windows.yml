@@ -32,6 +32,13 @@ jobs:
           node --version
           pnpm --version
           node -e 'console.log(JSON.stringify({ platform: process.platform, arch: process.arch, cpus: require("node:os").availableParallelism(), memoryBytes: require("node:os").totalmem() }))'
+      - name: Build the Gateway runtime before the test deadline
+        shell: bash
+        env:
+          VITEST: "1"
+          NODE_OPTIONS: --max-old-space-size=8192
+          OPENCLAW_BUILD_PRIVATE_QA: "0"
+        run: pnpm build qaRuntime
       - name: Exercise native Gateway startup and cron identity
         shell: bash
         env:
