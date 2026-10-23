@@ -21,6 +21,7 @@ assert not state.exists() and not app.exists()
 output.mkdir(exist_ok=True)
 owned = []
 streams = []
+native_pid = None
 keychain = home_dir / "Library/Keychains/settings-proof.keychain-db"
 
 
@@ -36,6 +37,16 @@ def start(args, name, env):
                                stderr=subprocess.STDOUT, env=env, start_new_session=True)
     owned.append(process)
     return process
+
+
+def native_pids():
+    executable = str(app / "Contents/MacOS/OpenClaw")
+    matches = []
+    for line in run(["/bin/ps", "-axo", "pid=,command="]).splitlines():
+        fields = line.strip().split(None, 1)
+        if len(fields) == 2 and (fields[1] == executable or fields[1].startswith(executable + " ")):
+            matches.append(int(fields[0]))
+    return matches
 
 
 try:
@@ -89,15 +100,34 @@ try:
             if time.monotonic() > deadline:
                 raise RuntimeError("Owned Gateway did not become healthy")
             time.sleep(0.5)
-    native = start([app / "Contents/MacOS/OpenClaw", "--attach-only"], "native.log", env)
+    # Match scripts/restart-mac.sh: GUI apps launch through Launch Services,
+    # rather than inheriting a detached Unix session from the CLI worker.
+    assert not native_pids(), "Unexpected existing app instance on disposable worker"
+    gui_env = {key: env[key] for key in ["HOME", "USER", "LOGNAME", "TMPDIR", "LANG"] if key in env}
+    gui_env.update({"PATH": "/usr/bin:/bin:/usr/sbin:/sbin",
+                    "OPENCLAW_STATE_DIR": str(state), "OPENCLAW_CONFIG_PATH": str(config),
+                    "OPENCLAW_SQLITE_LIBRARY": env["OPENCLAW_SQLITE_LIBRARY"]})
+    run(["/usr/bin/open", "-n", app, "--stdout", output / "native.log",
+         "--stderr", output / "native-error.log", "--args", "--attach-only"], env=gui_env)
+    launch_deadline = time.monotonic() + 30
+    while True:
+        pids = native_pids()
+        if len(pids) == 1:
+            native_pid = pids[0]
+            break
+        assert not pids, "Ambiguous app instances after scoped Launch Services request"
+        if time.monotonic() >= launch_deadline:
+            raise RuntimeError("Launch Services did not start the exact app executable")
+        time.sleep(0.25)
     (output / "build-identity.json").write_text(json.dumps({
         "sourceHead": "e9ee55430610d2ab4640fc8d4b37c6dcd4708e42",
         "bundleIdentifier": domain, "version": info.get("CFBundleShortVersionString"),
-        "build": info.get("CFBundleVersion"), "pid": native.pid,
+        "build": info.get("CFBundleVersion"), "pid": native_pid,
+        "launch": "Launch Services via open -n, minimal synthetic environment",
         "boundary": "GitHub-hosted disposable macOS, empty test Keychain, synthetic loopback Gateway",
         "packaging": "debug ad-hoc arm64, optional MLX TTS helper omitted"
     }, indent=2) + "\n")
-    subprocess.run([sys.executable, str(driver), "--pid", str(native.pid),
+    subprocess.run([sys.executable, str(driver), "--pid", str(native_pid),
                     "--expected-url", "http://127.0.0.1:18789/settings/appearance",
                     "--artifacts", str(output / "native-ui")], check=True, timeout=300, env=env)
 finally:
@@ -110,6 +140,13 @@ finally:
         (output / 'native-system.log').write_text(diagnostic.stdout + diagnostic.stderr)
     except (OSError, subprocess.TimeoutExpired) as error:
         (output / 'native-system.log').write_text(f'Diagnostic collection failed: {error}\n')
+    if native_pid and native_pid in native_pids():
+        os.kill(native_pid, signal.SIGTERM)
+        retire_deadline = time.monotonic() + 20
+        while native_pid in native_pids() and time.monotonic() < retire_deadline:
+            time.sleep(0.25)
+        if native_pid in native_pids():
+            os.kill(native_pid, signal.SIGKILL)
     for process in reversed(owned):
         if process.poll() is None:
             os.killpg(process.pid, signal.SIGTERM)
