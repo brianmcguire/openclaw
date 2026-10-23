@@ -117,14 +117,7 @@ export function createClickClackAgentProgressPublisher(params: {
       return drainPromise;
     }
     drainPromise = (async () => {
-      while (queue.length > 0) {
-        const frame = queue.shift();
-        if (!frame) {
-          continue;
-        }
-        if (frame.lineId) {
-          queuedLines.delete(frame.lineId);
-        }
+      for (let frame = queue.shift(); frame; frame = queue.shift()) {
         try {
           await params.client.publishEphemeral({
             ...params.target,
