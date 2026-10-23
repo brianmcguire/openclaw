@@ -127,17 +127,20 @@ class Native:
 
 
 def snapshot(pid):
-    return jxa("""
-let remaining=1800;
-function tree(e, depth) {
-  if(--remaining<0) throw Error('AX tree exceeds proof bound; inspect fixture');
-  const r=rec(e); r.bounds=rect(e);
-  if(depth<22) r.children=kids(e).map(x=>tree(x,depth+1));
-  return r;
-}
-return {frontmost:p.frontmost(), windows:p.windows().map((w,index)=>({index:index,
-  title:txt(val(w,'AXTitle')), minimized:val(w,'AXMinimized'), bounds:rect(w), tree:tree(w,0)}))};
-""", pid=pid, timeout=60)
+    helper = os.environ.get('OPENCLAW_AX_SNAPSHOT_HELPER')
+    if not helper or not Path(helper).is_file() or not os.access(helper, os.X_OK):
+        raise ProofFailure('SETUP: OPENCLAW_AX_SNAPSHOT_HELPER must name the compiled read-only native AX helper')
+    try:
+        output = run([helper, str(int(pid))], timeout=16)
+    except subprocess.TimeoutExpired as e:
+        raise ProofFailure('SETUP: Native AX helper exceeded its bounded request budget; inspect GUI prompts/permissions before evaluating product behavior') from e
+    try:
+        result = json.loads(output)
+    except json.JSONDecodeError as e:
+        raise ProofFailure('SETUP: Native AX helper did not return a JSON snapshot') from e
+    if not isinstance(result, dict) or not isinstance(result.get('windows'), list):
+        raise ProofFailure('SETUP: Native AX helper returned an incompatible snapshot')
+    return result
 
 
 def flattened(node):

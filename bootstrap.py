@@ -49,6 +49,7 @@ try:
         run(["security"] + args)
     run(["ditto", candidate, app])
     info = plistlib.loads((app / "Contents/Info.plist").read_bytes())
+    assert info["OpenClawGitCommit"] == "e9ee55430610d2ab4640fc8d4b37c6dcd4708e42", "Wrong candidate source"
     state.mkdir(mode=0o700)
     config = state / "openclaw.json"
     config.write_text(json.dumps({
@@ -73,13 +74,15 @@ try:
     env["OPENCLAW_CONFIG_PATH"] = str(config)
     runtime = app / "Contents/Resources/runtime"
     env["OPENCLAW_SQLITE_LIBRARY"] = str(runtime / "lib/libsqlite3.dylib")
+    start([sys.executable, driver.parent / "deny_network_prompt.py", "--seconds", "420"],
+          "local-network-denial.log", env)
     gateway = start([runtime / "bin/bun", runtime / "lib/node_modules/openclaw/openclaw.mjs",
                      "gateway", "run", "--allow-unconfigured"], "gateway.log", env)
     deadline = time.monotonic() + 100
     while True:
         assert gateway.poll() is None, "Owned Gateway exited; inspect gateway.log"
         try:
-            with urllib.request.urlopen("http://127.0.0.1:18789/healthz", timeout=2) as response:
+            with urllib.request.urlopen("http://127.0.0.1:18789/readyz", timeout=2) as response:
                 assert response.status == 200
             break
         except OSError:

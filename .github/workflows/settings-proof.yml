@@ -4,6 +4,9 @@ on:
     branches: [proof/macos-settings-151068]
 permissions:
   contents: read
+  actions: read
+env:
+  CANDIDATE_RUN_ID: ''
 jobs:
   settings:
     runs-on: xcode-27
@@ -30,16 +33,24 @@ jobs:
           /usr/bin/osascript -e 'tell application "System Events" to get name of first application process whose frontmost is true' >> proof-results/accessibility.txt
           /usr/sbin/screencapture -x proof-results/disposable-desktop.png
           python3 proof-runner/ui_driver.py --preflight-only --artifacts proof-results/preflight
+      - name: Compile bounded native accessibility observer
+        run: |
+          xcrun swiftc proof-runner/ax_snapshot.swift -o "$RUNNER_TEMP/ax-snapshot"
+          "$RUNNER_TEMP/ax-snapshot" --preflight
+          echo "OPENCLAW_AX_SNAPSHOT_HELPER=$RUNNER_TEMP/ax-snapshot" >> "$GITHUB_ENV"
       - uses: actions/checkout@v4
+        if: env.CANDIDATE_RUN_ID == ''
         with:
           repository: openclaw/openclaw
           ref: e9ee55430610d2ab4640fc8d4b37c6dcd4708e42
           persist-credentials: false
           path: source
       - uses: actions/setup-node@v4
+        if: env.CANDIDATE_RUN_ID == ''
         with:
           node-version: 24.22.1
       - name: Prepare pinned source and package manager
+        if: env.CANDIDATE_RUN_ID == ''
         working-directory: source
         run: |
           set -euo pipefail
@@ -52,6 +63,7 @@ jobs:
           ln -s /usr/bin/git ../proof-tools/git
           echo "$PWD/../proof-tools" >> "$GITHUB_PATH"
       - name: Package current main native app
+        if: env.CANDIDATE_RUN_ID == ''
         working-directory: source
         env:
           BUILD_CONFIG: debug
@@ -68,6 +80,33 @@ jobs:
             sleep 30
           done
           wait "$build_pid"
+      - name: Archive the exact app before UI proof
+        if: env.CANDIDATE_RUN_ID == ''
+        run: |
+          mkdir candidate
+          /usr/bin/ditto -c -k --sequesterRsrc --keepParent source/dist/OpenClaw.app candidate/OpenClaw.zip
+          shasum -a 256 candidate/OpenClaw.zip > candidate/sha256.txt
+      - name: Retain app for bounded proof recovery
+        if: env.CANDIDATE_RUN_ID == ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: settings-candidate-e9ee55430610
+          path: candidate/
+          retention-days: 3
+      - name: Recover previously built exact app
+        if: env.CANDIDATE_RUN_ID != ''
+        uses: actions/download-artifact@v4
+        with:
+          name: settings-candidate-e9ee55430610
+          path: candidate/
+          run-id: ${{ env.CANDIDATE_RUN_ID }}
+          github-token: ${{ github.token }}
+      - name: Verify and unpack recovered app
+        if: env.CANDIDATE_RUN_ID != ''
+        run: |
+          shasum -a 256 -c candidate/sha256.txt
+          mkdir -p source/dist
+          /usr/bin/ditto -x -k candidate/OpenClaw.zip source/dist
       - name: Exercise real status-menu Settings against owned Gateway
         run: python3 proof-runner/bootstrap.py source/dist/OpenClaw.app proof-results proof-runner/ui_driver.py
       - name: Retain scoped evidence
