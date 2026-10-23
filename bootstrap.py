@@ -101,6 +101,15 @@ try:
                     "--expected-url", "http://127.0.0.1:18789/settings/appearance",
                     "--artifacts", str(output / "native-ui")], check=True, timeout=300, env=env)
 finally:
+    # This host has no user data; retain native/WebKit diagnostics before teardown.
+    try:
+        diagnostic = subprocess.run(['/usr/bin/log', 'show', '--last', '5m', '--style', 'compact',
+                                     '--info', '--debug', '--predicate',
+                                     'subsystem BEGINSWITH "ai.openclaw" OR (process == "OpenClaw" AND messageType == 16) OR (process CONTAINS "WebKit" AND messageType == 16)'],
+                                    text=True, capture_output=True, timeout=20)
+        (output / 'native-system.log').write_text(diagnostic.stdout + diagnostic.stderr)
+    except (OSError, subprocess.TimeoutExpired) as error:
+        (output / 'native-system.log').write_text(f'Diagnostic collection failed: {error}\n')
     for process in reversed(owned):
         if process.poll() is None:
             os.killpg(process.pid, signal.SIGTERM)

@@ -236,7 +236,12 @@ def wait_settings(native, pid, texts, image_path, timeout=40):
             last = {'visible': False, 'error': str(error), **evidence}
             time.sleep(0.3)
             continue
-        ocr = observe_text(image_path)
+        try:
+            ocr = observe_text(image_path)
+        except (ProofFailure, subprocess.TimeoutExpired) as error:
+            last = {**evidence, **image, 'observationError':str(error)}
+            time.sleep(0.5)
+            continue
         matched = [text for text in texts if text.lower() in ocr['text'].lower()]
         last = {**evidence, **image, 'renderedMarkers': matched, 'requiredMarkers': texts,
                 'observedText': ocr['text'], 'ocrEngine': ocr['engine'],
@@ -311,16 +316,20 @@ def main():
                 native.mouse(status_item(args.pid)['bounds'], right=False)
                 first, current = dashboard_window(args.pid)
                 # Confirm the owned Dashboard actually paints before testing Settings.
-                render_deadline = time.monotonic() + 40
+                render_deadline = time.monotonic() + 60
                 while True:
                     initial_image = args.artifacts / 'before-settings.png'
                     capture(native, args.pid, {'window': current}, initial_image)
-                    initial_text = observe_text(initial_image)['text']
+                    try:
+                        initial_text = observe_text(initial_image)['text']
+                    except (ProofFailure, subprocess.TimeoutExpired) as error:
+                        report['initialObservationError'] = str(error)
+                        initial_text = ''
                     if len(initial_text.strip()) > 12:
                         report['initialDashboardText'] = initial_text
                         break
                     if time.monotonic() >= render_deadline:
-                        raise ProofFailure('SETUP: Initial Dashboard never painted readable content before Settings; inspect before-settings.png')
+                        raise ProofFailure(f"SETUP: Initial Dashboard did not yield readable content before Settings; inspect before-settings.png; last observer error: {report.get('initialObservationError', 'none')}")
                     time.sleep(0.5)
                     first, current = dashboard_window(args.pid)
             elif case == 'closed':
