@@ -1,0 +1,79 @@
+name: Isolated Settings window reproduction 151068
+on:
+  push:
+    branches: [proof/macos-settings-151068]
+permissions:
+  contents: read
+jobs:
+  settings:
+    runs-on: xcode-27
+    timeout-minutes: 65
+    env:
+      OPENCLAW_DISPOSABLE_GUI_WORKER: '1'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          path: proof-runner
+      - name: Verify disposable desktop before building
+        run: |
+          set -euo pipefail
+          test "$RUNNER_ENVIRONMENT" = github-hosted
+          test ! -e "$HOME/.openclaw"
+          test ! -e /Applications/OpenClaw.app
+          mkdir proof-results
+          sw_vers | tee proof-results/platform.txt
+          xcodebuild -version | tee -a proof-results/platform.txt
+          swift --version | tee -a proof-results/platform.txt
+          /usr/bin/osascript -e 'tell application "System Events" to get UI elements enabled' | tee proof-results/accessibility.txt
+          grep -qx true proof-results/accessibility.txt
+          /usr/bin/osascript -e 'tell application "System Events" to get name of first application process whose frontmost is true' >> proof-results/accessibility.txt
+          /usr/sbin/screencapture -x proof-results/disposable-desktop.png
+          python3 proof-runner/ui_driver.py --preflight-only --artifacts proof-results/preflight
+      - uses: actions/checkout@v4
+        with:
+          repository: openclaw/openclaw
+          ref: e9ee55430610d2ab4640fc8d4b37c6dcd4708e42
+          persist-credentials: false
+          path: source
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24.22.1
+      - name: Prepare pinned source and package manager
+        working-directory: source
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = e9ee55430610d2ab4640fc8d4b37c6dcd4708e42
+          corepack enable
+          corepack prepare "$(node -p 'require("./package.json").packageManager')" --activate
+          source scripts/lib/swift-toolchain.sh
+          require_swift_toolchain
+          mkdir ../proof-tools
+          ln -s /usr/bin/git ../proof-tools/git
+          echo "$PWD/../proof-tools" >> "$GITHUB_PATH"
+      - name: Package current main native app
+        working-directory: source
+        env:
+          BUILD_CONFIG: debug
+          BUILD_ARCHS: arm64
+          ALLOW_ADHOC_SIGNING: '1'
+          OPENCLAW_SKIP_MLX_TTS: '1'
+          CODESIGN_TIMESTAMP: 'off'
+        run: |
+          set -euo pipefail
+          /bin/bash scripts/package-mac-app.sh > ../proof-results/package.log 2>&1 &
+          build_pid=$!
+          while kill -0 "$build_pid" 2>/dev/null; do
+            tail -n 3 ../proof-results/package.log
+            sleep 30
+          done
+          wait "$build_pid"
+      - name: Exercise real status-menu Settings against owned Gateway
+        run: python3 proof-runner/bootstrap.py source/dist/OpenClaw.app proof-results proof-runner/ui_driver.py
+      - name: Retain scoped evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: settings-window-151068
+          path: proof-results/
+          retention-days: 7
