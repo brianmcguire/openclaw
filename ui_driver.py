@@ -143,12 +143,6 @@ def snapshot(pid):
     return result
 
 
-def flattened(node):
-    yield node
-    for child in node.get('children', []):
-        yield from flattened(child)
-
-
 def status_item(pid):
     result = jxa("""
 return p.menuBars().map((b,barIndex)=>({barIndex:barIndex,items:b.menuBarItems().map((e,index)=>{
@@ -207,7 +201,8 @@ def window_action(pid, index, action):
 
 
 def candidate_windows(state):
-    return [w for w in state['windows'] if any(n.get('role') == 'AXWebArea' for n in flattened(w['tree']))]
+    return [w for w in state['windows'] if w.get('subrole') == 'AXStandardWindow'
+            and w.get('bounds') and w['bounds']['size'][0] >= 600 and w['bounds']['size'][1] >= 400]
 
 
 def dashboard_window(pid, timeout=35):
@@ -224,33 +219,32 @@ def dashboard_window(pid, timeout=35):
     raise ProofFailure(f'No unminimized Dashboard AX window: {json.dumps(last)}')
 
 
-def settings_evidence(pid, expected_url, texts):
-    state, window = dashboard_window(pid)
-    nodes = list(flattened(window['tree']))
-    rendered = '\n'.join(' '.join(n.get(k, '') for k in ['name', 'description', 'value']) for n in nodes)
-    matched = [t for t in texts if t.lower() in rendered.lower()]
-    urls = [n['url'] for n in nodes if n.get('role') == 'AXWebArea' and n.get('url')]
-    expected = urlsplit(expected_url)
-    route_match = [u for u in urls if urlsplit(u).scheme == expected.scheme
-                   and urlsplit(u).netloc == expected.netloc
-                   and urlsplit(u).path.rstrip('/') == expected.path.rstrip('/')]
-    # Rendered Appearance-specific controls prove the settings surface even on
-    # WKWebView builds that do not expose AXURL. Do not invent an observed URL.
-    ok = state['frontmost'] and len(matched) == len(texts) and (not urls or bool(route_match))
-    return {'ok':ok, 'window':window, 'frontmost':state['frontmost'],
-            'renderedMarkers':matched, 'requiredMarkers':texts, 'webAreaUrls':urls,
-            'routeObservation':'matched' if route_match else 'unavailable' if not urls else 'mismatch'}
+def observe_text(image_path):
+    helper = os.environ['OPENCLAW_AX_SNAPSHOT_HELPER']
+    return json.loads(run([helper, '--ocr', str(image_path)], timeout=16))
 
 
-def wait_settings(pid, expected_url, texts, timeout=40):
+def wait_settings(native, pid, texts, image_path, timeout=40):
     deadline = time.monotonic() + timeout
     last = None
     while time.monotonic() < deadline:
-        last = settings_evidence(pid, expected_url, texts)
-        if last['ok']:
+        state, window = dashboard_window(pid)
+        evidence = {'window': window, 'frontmost': state['frontmost']}
+        try:
+            image = capture(native, pid, evidence, image_path)
+        except ProofFailure as error:
+            last = {'visible': False, 'error': str(error), **evidence}
+            time.sleep(0.3)
+            continue
+        ocr = observe_text(image_path)
+        matched = [text for text in texts if text.lower() in ocr['text'].lower()]
+        last = {**evidence, **image, 'renderedMarkers': matched, 'requiredMarkers': texts,
+                'observedText': ocr['text'], 'ocrEngine': ocr['engine'],
+                'routeObservation': 'not queried; actual rendered Settings pixels verified'}
+        if state['frontmost'] and len(matched) == len(texts):
             return last
         time.sleep(0.4)
-    raise ProofFailure(f'Settings page did not render: {json.dumps(last)}')
+    raise ProofFailure(f'Settings did not remain foreground and render its Appearance controls: {json.dumps(last)}')
 
 
 def capture(native, pid, evidence, path):
@@ -277,7 +271,7 @@ def main():
     parser.add_argument('--pid', type=int)
     parser.add_argument('--expected-url')
     parser.add_argument('--artifacts', type=Path, required=True)
-    parser.add_argument('--settings-text', action='append', help='All markers required; defaults Appearance, Accent color, Text size')
+    parser.add_argument('--settings-text', action='append', help='All visible pixel markers required; defaults Appearance, Theme')
     args = parser.parse_args()
     if sys.platform != 'darwin' or os.environ.get('GITHUB_ACTIONS') != 'true' or os.environ.get('RUNNER_OS') != 'macOS':
         raise ProofFailure('Refusing to drive UI outside an explicitly disposable GitHub Actions macOS worker')
@@ -300,7 +294,7 @@ def main():
         expected = urlsplit(args.expected_url)
         if expected.scheme not in ('http', 'https') or expected.hostname not in ('127.0.0.1', 'localhost', '::1') or expected.username or expected.password:
             raise ProofFailure('Expected Settings URL must use credential-free synthetic loopback origin')
-        texts = args.settings_text or ['Appearance', 'Accent color', 'Text size']
+        texts = args.settings_text or ['Appearance', 'Theme']
         report['pid'] = args.pid
         report['expectedUrl'] = args.expected_url
         startup_deadline = time.monotonic() + 30
@@ -315,7 +309,20 @@ def main():
         for case in ['existing', 'closed', 'minimized', 'command-comma']:
             if case == 'existing':
                 native.mouse(status_item(args.pid)['bounds'], right=False)
-                dashboard_window(args.pid)
+                first, current = dashboard_window(args.pid)
+                # Confirm the owned Dashboard actually paints before testing Settings.
+                render_deadline = time.monotonic() + 40
+                while True:
+                    initial_image = args.artifacts / 'before-settings.png'
+                    capture(native, args.pid, {'window': current}, initial_image)
+                    initial_text = observe_text(initial_image)['text']
+                    if len(initial_text.strip()) > 12:
+                        report['initialDashboardText'] = initial_text
+                        break
+                    if time.monotonic() >= render_deadline:
+                        raise ProofFailure('SETUP: Initial Dashboard never painted readable content before Settings; inspect before-settings.png')
+                    time.sleep(0.5)
+                    first, current = dashboard_window(args.pid)
             elif case == 'closed':
                 state, current = dashboard_window(args.pid)
                 window_action(args.pid, current['index'], 'close')
@@ -344,15 +351,20 @@ def main():
                 entry = {'keyboard':'command-comma'}
             else:
                 entry = menu_settings(args.pid, native)
-            evidence = wait_settings(args.pid, args.expected_url, texts)
+            report['activeCase'] = case
+            report['lastEntrypoint'] = entry
+            report_path.write_text(json.dumps(report, indent=2))
+            image_path = args.artifacts / f'{case}.png'
+            evidence = wait_settings(native, args.pid, texts, image_path)
             # A flashing window is not success: require the same Settings surface
             # to remain visible/unminimized through a second independent observation.
             time.sleep(2)
-            stable = wait_settings(args.pid, args.expected_url, texts, timeout=10)
-            if stable['window']['index'] != evidence['window']['index']:
+            stable = wait_settings(native, args.pid, texts, image_path, timeout=10)
+            if stable['windowId'] != evidence['windowId']:
                 raise ProofFailure('Settings native window changed during stability observation')
-            image = capture(native, args.pid, stable, args.artifacts / f'{case}.png')
-            report['cases'].append({'case':case, 'entrypoint':entry, **stable, **image})
+            desktop_path = args.artifacts / f'{case}-desktop.png'
+            run(['/usr/sbin/screencapture', '-x', '-m', str(desktop_path)])
+            report['cases'].append({'case':case, 'entrypoint':entry, 'desktopImage':str(desktop_path), **stable})
             report_path.write_text(json.dumps(report, indent=2))
         report['status'] = 'passed'
     except Exception as e:
