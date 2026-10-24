@@ -1,5 +1,6 @@
 name: Isolated Settings window reproduction 151068
 on:
+  workflow_dispatch:
   push:
     branches: [proof/macos-settings-151068]
 permissions:
