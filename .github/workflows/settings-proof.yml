@@ -9,7 +9,7 @@ env:
   CANDIDATE_RUN_ID: '40001464704'
 jobs:
   settings:
-    runs-on: xcode-27
+    runs-on: macos-26
     timeout-minutes: 65
     env:
       OPENCLAW_DISPOSABLE_GUI_WORKER: '1'
@@ -38,6 +38,13 @@ jobs:
           xcrun swiftc proof-runner/ax_snapshot.swift -o "$RUNNER_TEMP/ax-snapshot"
           "$RUNNER_TEMP/ax-snapshot" --preflight
           echo "OPENCLAW_AX_SNAPSHOT_HELPER=$RUNNER_TEMP/ax-snapshot" >> "$GITHUB_ENV"
+      - name: Qualify actual WebKit drawing on disposable desktop
+        run: |
+          set -euo pipefail
+          xcrun swiftc proof-runner/desktop_canary.swift -o "$RUNNER_TEMP/desktop-canary"
+          "$RUNNER_TEMP/desktop-canary" "$PWD/proof-results"
+          "$OPENCLAW_AX_SNAPSHOT_HELPER" --ocr proof-results/desktop-canary.png > proof-results/desktop-canary-ocr.json
+          python3 -c 'import json; r=json.load(open("proof-results/desktop-canary-ocr.json")); assert "Isolated desktop ready" in r["text"] and "WebKit rendering check" in r["text"], r'
       - uses: actions/checkout@v4
         if: env.CANDIDATE_RUN_ID == ''
         with:
