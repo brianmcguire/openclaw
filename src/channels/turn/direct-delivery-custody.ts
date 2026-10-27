@@ -104,5 +104,6 @@ export function toCoreManagedDeliveryInfo(info: ChannelDeliveryInfo) {
     ...(info.assistantMessageIndex === undefined
       ? {}
       : { assistantMessageIndex: info.assistantMessageIndex }),
+    ...(info.blockSourceRange ? { blockSourceRange: info.blockSourceRange } : {}),
   };
 }
