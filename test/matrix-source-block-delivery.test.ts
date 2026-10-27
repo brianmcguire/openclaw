@@ -14,6 +14,7 @@ import { createBlockReplyPipeline } from "../src/auto-reply/reply/block-reply-pi
 import * as dispatchHarness from "../src/auto-reply/reply/dispatch-from-config.test-support.js";
 import { isFinalizedInboundContext } from "../src/auto-reply/reply/inbound-context.js";
 import { createReplyDispatcherWithTyping } from "../src/auto-reply/reply/reply-dispatcher.js";
+import { toCoreManagedDeliveryInfo } from "../src/channels/turn/direct-delivery-custody.js";
 
 // mock-isolation: This fixture has no durable binding; delivery still settles through core.
 vi.mock("openclaw/plugin-sdk/conversation-binding-inspection-runtime", async (importOriginal) => ({
@@ -53,7 +54,8 @@ describe("Matrix source block delivery through settled core dispatch", () => {
         const deliver = options.deliver;
         const prepared = createReplyDispatcherWithTyping({
           ...options,
-          deliver: async (payload, info) => await deliver(payload, info),
+          deliver: async (payload, info) =>
+            await deliver(payload, toCoreManagedDeliveryInfo(info, payload)),
         });
         settledDispatcher = prepared.dispatcher;
         return prepared;

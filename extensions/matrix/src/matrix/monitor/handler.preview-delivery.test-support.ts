@@ -1,12 +1,9 @@
 import { createChannelPartialDeliveryError } from "openclaw/plugin-sdk/channel-inbound";
 import type { LivePreviewDeliveryResult } from "openclaw/plugin-sdk/channel-outbound";
-import type {
-  GetReplyOptions,
-  ReplyDispatchRuntimeInfo,
-  ReplyPayload,
-} from "openclaw/plugin-sdk/reply-runtime";
+import type { GetReplyOptions, ReplyPayload } from "openclaw/plugin-sdk/reply-runtime";
 import { expect, it, type Mock } from "vitest";
 import { MATRIX_OPENCLAW_FINALIZED_PREVIEW_KEY } from "../send/types.js";
+import type { MatrixReplyDispatchInfo } from "./handler-draft-controller.js";
 
 type PreviewDeliveryHarness = {
   createStreamingHarness: (options: {
@@ -15,7 +12,7 @@ type PreviewDeliveryHarness = {
     blockStreamingEnabled?: boolean;
   }) => {
     dispatch: () => Promise<{
-      deliver: (payload: ReplyPayload, info: ReplyDispatchRuntimeInfo) => Promise<unknown>;
+      deliver: (payload: ReplyPayload, info: MatrixReplyDispatchInfo) => Promise<unknown>;
       onError: (error: unknown, info: { kind: string }) => void;
       opts: Pick<
         GetReplyOptions,
@@ -208,7 +205,7 @@ export function registerMatrixPreviewDeliveryTests(harness: PreviewDeliveryHarne
         kind: "block",
         assistantMessageIndex: 1,
         blockSourceRange: [0, 7],
-      } satisfies ReplyDispatchRuntimeInfo;
+      } satisfies MatrixReplyDispatchInfo;
       await expect(deliver({ text: "Alpha" }, info)).rejects.toMatchObject({
         code: "CHANNEL_PARTIAL_DELIVERY",
         deliveryResult: { visibleReplySent: true, content: preview },

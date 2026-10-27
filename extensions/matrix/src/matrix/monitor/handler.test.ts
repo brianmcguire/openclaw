@@ -2,11 +2,7 @@ import path from "node:path";
 import { expectDefined } from "@openclaw/normalization-core";
 import { projectAgentToolActivity } from "openclaw/plugin-sdk/agent-harness-runtime";
 import { createDeferred } from "openclaw/plugin-sdk/extension-shared";
-import type {
-  GetReplyOptions,
-  ReplyDispatchRuntimeInfo,
-  ReplyPayload,
-} from "openclaw/plugin-sdk/reply-runtime";
+import type { GetReplyOptions, ReplyPayload } from "openclaw/plugin-sdk/reply-runtime";
 import {
   testing as sessionBindingTesting,
   registerSessionBindingAdapter,
@@ -21,6 +17,7 @@ import { resetSystemEventsForTest } from "openclaw/plugin-sdk/test-fixtures";
 import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { installMatrixMonitorTestRuntime } from "../../test-runtime.js";
 import type { MatrixStreamingConfig } from "../../types.js";
+import type { MatrixReplyDispatchInfo } from "./handler-draft-controller.js";
 import { registerMatrixLiveAllowlistTests } from "./handler.live-allowlist.test-support.js";
 import { registerMatrixPreviewDeliveryTests } from "./handler.preview-delivery.test-support.js";
 import {
@@ -743,7 +740,7 @@ describe("matrix monitor handler failure handling", () => {
 });
 
 describe("matrix monitor handler draft streaming", () => {
-  type DeliverFn = (payload: ReplyPayload, info: ReplyDispatchRuntimeInfo) => Promise<unknown>;
+  type DeliverFn = (payload: ReplyPayload, info: MatrixReplyDispatchInfo) => Promise<unknown>;
 
   const waitForDrafts = (count = 1) =>
     waitForState(() => expect(sendDraftMock).toHaveBeenCalledTimes(count));

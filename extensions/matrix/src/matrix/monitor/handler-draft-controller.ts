@@ -12,6 +12,11 @@ import type { MatrixClient } from "../sdk.js";
 import { formatMatrixToolProgressMarkdownCode } from "./handler-helpers.js";
 import { loadMatrixDraftStream, type MatrixDraftStreamHandle } from "./handler-runtime.js";
 
+/** Host-owned source coverage projected onto block deliveries, not a public SDK field. */
+export type MatrixReplyDispatchInfo = ReplyDispatchRuntimeInfo & {
+  blockSourceRange?: readonly [start: number, end: number];
+};
+
 export async function createMatrixDraftController(params: {
   streaming: MatrixStreamingMode;
   previewToolProgressEnabled: boolean;
@@ -135,7 +140,7 @@ export async function createMatrixDraftController(params: {
 
   const captureDraftBlockBoundary = (
     text: string | undefined,
-    info: Pick<ReplyDispatchRuntimeInfo, "assistantMessageIndex" | "blockSourceRange">,
+    info: Pick<MatrixReplyDispatchInfo, "assistantMessageIndex" | "blockSourceRange">,
   ) => ({
     messageGeneration: info.assistantMessageIndex ?? currentDraftMessageGeneration,
     previewMessageGeneration: currentDraftMessageGeneration,

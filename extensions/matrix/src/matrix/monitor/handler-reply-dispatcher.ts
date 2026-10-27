@@ -16,7 +16,7 @@ import {
   getReplyPayloadTtsSupplement,
   resolveSendableOutboundReplyParts,
 } from "openclaw/plugin-sdk/reply-payload";
-import type { ReplyDispatchRuntimeInfo, ReplyPayload } from "openclaw/plugin-sdk/reply-runtime";
+import type { ReplyPayload } from "openclaw/plugin-sdk/reply-runtime";
 import type { RuntimeEnv } from "openclaw/plugin-sdk/runtime";
 import {
   normalizeLowercaseStringOrEmpty,
@@ -29,7 +29,10 @@ import type { CoreConfig, MatrixStreamingMode, ReplyToMode } from "../../types.j
 import type { MatrixClient } from "../sdk.js";
 import { sendMessageMatrix } from "../send.js";
 import { MATRIX_OPENCLAW_FINALIZED_PREVIEW_KEY, type MatrixSendResult } from "../send/types.js";
-import type { createMatrixDraftController } from "./handler-draft-controller.js";
+import type {
+  createMatrixDraftController,
+  MatrixReplyDispatchInfo,
+} from "./handler-draft-controller.js";
 import {
   loadMatrixSendModule,
   matrixTextWouldActivateMentions,
@@ -215,7 +218,7 @@ export function createMatrixReplyDispatcher(config: {
       onReplyStart: typingCallbacks.onReplyStart,
       onIdle: typingCallbacks.onIdle,
     },
-    deliverReply: async (payload: ReplyPayload, info: ReplyDispatchRuntimeInfo) => {
+    deliverReply: async (payload: ReplyPayload, info: MatrixReplyDispatchInfo) => {
       const createDraftReceipt = (id: string): MessageReceipt =>
         createPreviewMessageReceipt({
           id,
