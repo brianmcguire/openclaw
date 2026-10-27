@@ -7,7 +7,6 @@ import { createControlUiE2eContextOptions } from "./control-ui-e2e-suite.test-su
 import * as ui from "./session-management.compact.test-support.ts";
 import {
   actionOpacity,
-  controlUiSessionUrl,
   createSessionManagementE2eSuite,
 } from "./session-management.test-support.ts";
 
