@@ -1,9 +1,5 @@
-import { writeFile } from "node:fs/promises";
-import path from "node:path";
 import type { BrowserContextOptions, Locator, Page } from "playwright";
 import { expect, it } from "vitest";
-import { createControlUiE2eArtifactDir } from "../test-helpers/control-ui-e2e-artifacts.ts";
-import { takeControlUiScreenshotFrame } from "../test-helpers/control-ui-e2e-screenshot.ts";
 import {
   controlUiBundledGatewayUrl,
   controlUiBundledSettingsStorageKey,
@@ -11,8 +7,12 @@ import {
 } from "../test-helpers/control-ui-e2e.ts";
 import { navigationDrawerToggle } from "../test-helpers/control-ui-navigation.ts";
 import { createControlUiSessionRow as sessionRow } from "../test-helpers/control-ui-session-fixtures.ts";
-import { createControlUiE2eSuite } from "./control-ui-e2e-suite.test-support.ts";
 import {
+  createControlUiE2eSuite,
+  type ControlUiE2eSuite,
+} from "./control-ui-e2e-suite.test-support.ts";
+import {
+  actionOpacity,
   controlUiSessionUrl,
   createSessionManagementE2eSuite,
   installMockGateway,
@@ -84,90 +84,87 @@ async function expectSessionGeometry(row: Locator, multiline = false) {
 }
 
 async function expectTwoLineTitleSpace(
-  browserSuite: ReturnType<typeof createControlUiE2eSuite>,
+  browserSuite: ControlUiE2eSuite,
   pointer: "fine" | "touch" | "hybrid",
 ) {
-  const hasTouch = pointer === "touch";
   await browserSuite.withPage(
-    { hasTouch, viewport: { width: 1280, height: 800 }, reducedMotion: "reduce" },
+    { ...pageOptions(1280, 800, pointer === "touch"), reducedMotion: "reduce" },
     async ({ page }) => {
-      const activeKey = "agent:main:main";
-      const targetKey = "agent:main:dashboard:release-review";
+      const key = "agent:main:two-line";
       await page.addInitScript({ content: createControlUiMockSameOriginGatewayScript() });
       await page.addInitScript(
-        ({ key, gatewayUrl }) => {
-          localStorage.setItem(`openclaw.control.currentGateway.v1:${gatewayUrl}`, gatewayUrl);
-          localStorage.setItem(key, JSON.stringify({ sidebarAgentsMode: "chip", navWidth: 320 }));
+        ({ storage, gateway }) => {
+          localStorage.setItem(`openclaw.control.currentGateway.v1:${gateway}`, gateway);
+          localStorage.setItem(
+            storage,
+            JSON.stringify({ navWidth: 320, sidebarAgentsMode: "chip" }),
+          );
           localStorage.setItem("openclaw:sidebar:sessions:show-preview", "true");
         },
         {
-          key: controlUiBundledSettingsStorageKey(browserSuite.server.baseUrl),
-          gatewayUrl: controlUiBundledGatewayUrl(browserSuite.server.baseUrl),
+          storage: controlUiBundledSettingsStorageKey(browserSuite.server.baseUrl),
+          gateway: controlUiBundledGatewayUrl(browserSuite.server.baseUrl),
         },
       );
+      const preview = { unread: true, lastMessagePreview: "Ready for review" };
       await installMockGateway(page, {
-        sessionKey: activeKey,
-        sessions: [
-          sessionRow(activeKey, "Home", Date.now()),
-          sessionRow(targetKey, "Tracking release readiness for the next update", Date.now(), {
-            category: "Research",
-            lastMessagePreview: "Review the deployment checklist and remaining work",
-          }),
-        ],
+        sessions: [sessionRow(key, "Two-line session", 1, preview)],
       });
-      await page.goto(controlUiSessionUrl(browserSuite.server.baseUrl, activeKey));
+      await page.goto(controlUiSessionUrl(browserSuite.server.baseUrl, "agent:main:main"));
       await waitForSessionRosterHydration(page);
-      const row = page.locator(`.sidebar-recent-session[data-session-key="${targetKey}"]`);
-      const name = row.locator(".sidebar-recent-session__name");
+      const row = page.locator(`.sidebar-recent-session[data-session-key="${key}"]`);
+      const name = part(row, "name"),
+        badge = row.locator(".session-glyph__badge--unread");
       await name.waitFor();
+      await badge.waitFor();
       expect(await row.getAttribute("class")).not.toContain("--single-line");
-      const media = await page.evaluate(() => ({
-        hover: matchMedia("(hover: hover)").matches,
-        pointerCoarse: matchMedia("(pointer: coarse)").matches,
-        pointerFine: matchMedia("(pointer: fine)").matches,
-        anyPointerCoarse: matchMedia("(any-pointer: coarse)").matches,
-        anyPointerFine: matchMedia("(any-pointer: fine)").matches,
-      }));
-      expect(media).toMatchObject({
-        hover: pointer !== "touch",
-        pointerCoarse: pointer !== "fine",
-        pointerFine: pointer === "fine",
-      });
-      const proofDir =
-        process.env.OPENCLAW_CAPTURE_UI_PROOF === "1"
-          ? createControlUiE2eArtifactDir("sidebar-title-space")
-          : undefined;
-      for (const state of ["hover", "focus"] as const) {
-        if (state === "hover") {
-          await row.hover({ position: { x: 12, y: 4 } });
-        } else {
-          await page.mouse.move(1100, 700);
-          await row.locator(".sidebar-recent-session__link").focus();
+      expect(
+        await page.evaluate(() =>
+          ["hover: hover", "pointer: coarse", "pointer: fine"].map(
+            (q) => matchMedia(`(${q})`).matches,
+          ),
+        ),
+      ).toEqual([pointer !== "touch", pointer !== "fine", pointer === "fine"]);
+      const resting = await box(name),
+        restingBadge = await box(badge);
+      for (const activate of [() => row.hover(), () => part(row, "link").focus()]) {
+        await page.mouse.move(1100, 700);
+        await activate();
+        const title = await box(name),
+          actions = await box(row.locator(".session-row-actions"));
+        expect(title.width).toBeGreaterThan(100);
+        expect(actions.x - title.x - title.width).toBeGreaterThanOrEqual(-1);
+        expect(actions.x - title.x - title.width).toBeLessThanOrEqual(12);
+        expect(title.x).toBe(resting.x);
+        expect(await box(badge)).toEqual(restingBadge);
+        if (pointer === "fine") {
+          const gap = actions.x - title.x - title.width;
+          expect(resting.width - title.width).toBeCloseTo(actions.width + gap, 0);
         }
-        const geometry = await row.evaluate((element) => {
-          const label = element.querySelector(".sidebar-recent-session__name")!;
-          const actions = element.querySelector(".session-row-actions")!;
-          return {
-            titleWidth: label.getBoundingClientRect().width,
-            gap: actions.getBoundingClientRect().left - label.getBoundingClientRect().right,
-          };
-        });
-        console.log(JSON.stringify({ pointer, media, state, ...geometry }));
-        if (proofDir) {
-          const surface = page.locator(".shell-nav");
-          const frame = await takeControlUiScreenshotFrame(page, surface, [row], {
-            elements: [surface],
-            animations: "disabled",
-          });
-          await writeFile(path.join(proofDir, `${pointer}-${state}.png`), frame.elements[0]!.png);
-        }
-        expect.soft(geometry.titleWidth).toBeGreaterThan(100);
-        // Leave the normal small gutter, without losing another action area's width.
-        expect
-          .soft(geometry.gap, JSON.stringify({ pointer, media, state, ...geometry }))
-          .toBeLessThanOrEqual(12);
-        expect.soft(geometry.gap).toBeGreaterThanOrEqual(-1);
       }
+      if (pointer !== "fine") {
+        const pin = row.locator("[data-sidebar-session-pin]");
+        await expect.poll(() => actionOpacity(pin)).toBe("1");
+        const bounds = await box(row),
+          center = bounds.y + bounds.height / 2;
+        expect((await box(part(row, "subtitle"))).y).toBeGreaterThan(center);
+        for (const button of [pin, row.locator("[data-sidebar-session-archive]")]) {
+          const target = await box(button);
+          expect(Math.abs(target.y + target.height / 2 - center)).toBeLessThanOrEqual(1);
+        }
+      }
+      await page.evaluate(() =>
+        document.documentElement.style.setProperty("--control-ui-text-scale", "1.4"),
+      );
+      await expect
+        .poll(() =>
+          part(row, "details").evaluate(
+            (element) =>
+              element.previousElementSibling!.getBoundingClientRect().bottom -
+              element.getBoundingClientRect().top,
+          ),
+        )
+        .toBeLessThanOrEqual(0.5);
     },
   );
 }
