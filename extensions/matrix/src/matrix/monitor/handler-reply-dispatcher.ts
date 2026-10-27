@@ -16,7 +16,7 @@ import {
   getReplyPayloadTtsSupplement,
   resolveSendableOutboundReplyParts,
 } from "openclaw/plugin-sdk/reply-payload";
-import type { ReplyPayload } from "openclaw/plugin-sdk/reply-runtime";
+import type { ReplyDispatchRuntimeInfo, ReplyPayload } from "openclaw/plugin-sdk/reply-runtime";
 import type { RuntimeEnv } from "openclaw/plugin-sdk/runtime";
 import {
   normalizeLowercaseStringOrEmpty,
@@ -196,11 +196,13 @@ export function createMatrixReplyDispatcher(config: {
   };
   const { previewLifecycle } = draftController;
   let nonFinalReplyDeliveryFailed = false;
-  const beginNextBlockDraft = () => {
+  const beginNextBlockDraft = (
+    boundary: ReturnType<MatrixDraftController["captureDraftBlockBoundary"]>,
+  ) => {
     // Each block owns a new draft generation; prior retained/consumed state must not
     // suppress settlement or cleanup for the next provider-visible event.
     draftController.beginDraftGeneration();
-    draftController.advanceDraftBlockBoundary();
+    draftController.advanceDraftBlockBoundary(boundary);
     draftStream?.reset();
     draftController.resetReplyToIdForNextBlock();
     draftController.updateDraftFromLatestFullText();
@@ -213,7 +215,7 @@ export function createMatrixReplyDispatcher(config: {
       onReplyStart: typingCallbacks.onReplyStart,
       onIdle: typingCallbacks.onIdle,
     },
-    deliverReply: async (payload: ReplyPayload, info: { kind: "tool" | "block" | "final" }) => {
+    deliverReply: async (payload: ReplyPayload, info: ReplyDispatchRuntimeInfo) => {
       const createDraftReceipt = (id: string): MessageReceipt =>
         createPreviewMessageReceipt({
           id,
@@ -246,6 +248,11 @@ export function createMatrixReplyDispatcher(config: {
           : payload;
       const { hasMedia } = resolveSendableOutboundReplyParts(payload);
       const payloadText = payload.text ?? ttsSupplement?.spokenText;
+      // Capture before transport can yield to a newer assistant message.
+      const blockBoundary =
+        info.kind === "block" && !payload.isCompactionNotice
+          ? draftController.captureDraftBlockBoundary(payloadText, info)
+          : undefined;
       const payloadReplyMismatch =
         ((!threadTarget && replyToMode !== "off") ||
           payload.replyToTag ||
@@ -352,6 +359,21 @@ export function createMatrixReplyDispatcher(config: {
         if (retainedDraftDelivery) {
           previewLifecycle.retainPreview();
         }
+        if (blockBoundary) {
+          // A retained cumulative preview already shows its suffix. Do not replay it.
+          beginNextBlockDraft(
+            retainedDraftDelivery
+              ? {
+                  ...blockBoundary,
+                  messageGeneration: blockBoundary.previewMessageGeneration,
+                  endOffset:
+                    blockBoundary.messageGeneration === blockBoundary.previewMessageGeneration
+                      ? Math.max(blockBoundary.endOffset, blockBoundary.previewEndOffset)
+                      : blockBoundary.previewEndOffset,
+                }
+              : blockBoundary,
+          );
+        }
         throw toMatrixPartialDeliveryError(
           error,
           retainedDraftDelivery ? [retainedDraftDelivery] : [],
@@ -370,8 +392,8 @@ export function createMatrixReplyDispatcher(config: {
           (result): result is MatrixReplyDeliveryResult => result !== undefined,
         ),
       );
-      if (info.kind === "block") {
-        beginNextBlockDraft();
+      if (blockBoundary) {
+        beginNextBlockDraft(blockBoundary);
         await typingCallbacks.onReplyStart();
       }
       return mergedDelivery;
@@ -381,9 +403,6 @@ export function createMatrixReplyDispatcher(config: {
         previewLifecycle.observeFailure();
       } else {
         nonFinalReplyDeliveryFailed = true;
-      }
-      if (info.kind === "block") {
-        beginNextBlockDraft();
       }
       runtime.error?.(`matrix ${info.kind} reply failed: ${String(err)}`);
     },

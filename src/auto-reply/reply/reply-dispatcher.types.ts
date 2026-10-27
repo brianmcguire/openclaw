@@ -44,6 +44,8 @@ export type ReplyFollowupAdmissionBarrierTimeoutPolicy = {
 export type ReplyDispatchRuntimeInfo = {
   kind: ReplyDispatchKind;
   assistantMessageIndex?: number;
+  /** UTF-16 source coverage of a streamed block, including consumed separators. */
+  blockSourceRange?: readonly [start: number, end: number];
   /** Display identity for replies in a configured multi-agent group. */
   participant?: { agentId: string; name: string };
   /** @internal Claim direct-send custody immediately before recipient-visible platform I/O. */

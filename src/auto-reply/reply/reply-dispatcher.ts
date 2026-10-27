@@ -19,6 +19,7 @@ import { getGroupThreadParticipant } from "../group-thread-context.js";
 import {
   copyReplyPayloadMetadata,
   getReplyPayloadMetadata,
+  readReplyPayloadSourceOccurrence,
   setReplyPayloadMetadata,
 } from "../reply-payload.js";
 import type { GetReplyOptions, ReplyPayload } from "../types.js";
@@ -174,10 +175,12 @@ function buildReplyDispatchRuntimeInfo(
   kind: ReplyDispatchKind,
 ): ReplyDispatchRuntimeInfo {
   const assistantMessageIndex = getReplyPayloadMetadata(payload)?.assistantMessageIndex;
+  const blockSource = kind === "block" ? readReplyPayloadSourceOccurrence(payload) : undefined;
   const participant = getGroupThreadParticipant();
   return {
     kind,
     ...(assistantMessageIndex !== undefined ? { assistantMessageIndex } : {}),
+    ...(blockSource ? { blockSourceRange: blockSource.sourceRange } : {}),
     ...(participant ? { participant } : {}),
   };
 }
