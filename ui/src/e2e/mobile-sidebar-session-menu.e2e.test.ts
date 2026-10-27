@@ -114,7 +114,7 @@ async function expectTwoLineTitleSpace(
       await waitForSessionRosterHydration(page);
       const row = page.locator(`.sidebar-recent-session[data-session-key="${key}"]`);
       const name = part(row, "name"),
-        badge = row.locator(".session-glyph__badge--unread");
+        badge = row.locator(".sidebar-session-indicator .session-unread-dot");
       await name.waitFor();
       await badge.waitFor();
       expect(await row.getAttribute("class")).not.toContain("--single-line");
