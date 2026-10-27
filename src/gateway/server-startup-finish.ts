@@ -156,6 +156,8 @@ export async function finishGatewayStartup(params: {
       rateLimiter: authRateLimiter,
       browserRateLimiter: browserAuthRateLimiter,
       nodeReapprovalCoordinator,
+      isConnectPending: () => !startupState.dispatchReady,
+      startupMethodsReady: kernel.startupMethodsReady,
       isStartupPending: runtime.isGatewayStartupPending,
       isPendingWorkerNodeSetup: workerEnvironmentService?.hasPendingNodeEnrollmentSetup,
       admitsNodeSetupCompletion: workerEnvironmentService?.admitsNodeSetupCompletion,
@@ -274,6 +276,7 @@ export async function finishGatewayStartup(params: {
           logHooks,
           logChannels,
           unlockStartupMethods: kernel.unlockStartupMethods,
+          trackInputRecovery: kernel.trackInputRecovery,
           refreshChatMetadata: chatMetadataLifecycle.refresh,
           loadStartupPlugins: async () => {
             const { loadGatewayStartupPluginRuntime } = await import("./server-startup-plugins.js");
@@ -418,7 +421,8 @@ export async function finishGatewayStartup(params: {
     configRevisionProjector: gatewayRequestContext.configRevisionProjector,
     resolveGatewayContext: resolvePluginGatewayContext,
     minimalTestGateway,
-    initialConfig: cfgAtStart,
+    // Preserve the published startup authority, including plugin activation or a no-op publish.
+    initialConfig: getRuntimeConfig(),
     initialPluginInstallRecords: pluginMetadataSnapshot?.index.installRecords,
     initialCompareConfig: configSnapshot.sourceConfig,
     initialSnapshotRawHash: configSnapshot.exists ? hashConfigRaw(configSnapshot.raw) : null,
@@ -633,6 +637,7 @@ export async function finishGatewayStartup(params: {
         scheduler: runtime.scheduler,
         delayMs: RETAINED_PLUGIN_CLEANUP_DELAY_MS,
         retryDelayMs: RETAINED_PLUGIN_CLEANUP_DELAY_MS,
+        repeatDelayMs: 60 * 60_000,
         isClosing: () => lifecycle.closePreludeStarted,
         isBusy: () => getActiveGatewayRootWorkCount({ excludeCurrent: true }) > 0,
         run: async () => {
@@ -665,7 +670,7 @@ export async function finishGatewayStartup(params: {
         repeatDelayMs: 15 * 60_000,
         run: async () => {
           const { reclaimAbandonedSqliteSnapshotsAsync } =
-            await import("../infra/sqlite-snapshot-staging.js");
+            await import("../infra/sqlite-snapshot-reclamation.js");
           await reclaimAbandonedSqliteSnapshotsAsync();
         },
         log,
