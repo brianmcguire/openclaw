@@ -1331,7 +1331,6 @@ export const databaseWorkerCoreTestFiles = [
   "test/cron-conversation-delivery.codex.integration.test.ts",
   "test/imessage-reply-alias.integration.test.ts",
   "test/matrix-channel-read-authority.integration.test.ts",
-  "test/matrix-source-block-delivery.test.ts",
   "test/telegram-history-read.integration.test.ts",
   "test/plugins/beam-http-identity.test.ts",
   "test/plugins/codex-client-version-catalog-worker.test.ts",
