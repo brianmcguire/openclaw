@@ -3,6 +3,86 @@ import XCTest
 
 @MainActor
 final class AdaptiveLayoutUITests: XCTestCase {
+    func testChatToolbarFitsCurrentWindow() throws {
+        continueAfterFailure = false
+        let app = XCUIApplication()
+        app.launchArguments = [
+            "--openclaw-initial-destination", "chat",
+            "--openclaw-screenshot-mode",
+            "--openclaw-ui-test-readiness",
+            "--openclaw-appearance", "light",
+        ]
+        app.launch()
+        defer { app.terminate() }
+        let input = app.descendants(matching: .any)["chat-message-input"].firstMatch
+        XCTAssertTrue(input.waitForExistence(timeout: 30))
+        let identity = app.buttons["chat-agent-identity"].firstMatch
+        let actions = app.buttons["Chat actions"].firstMatch
+        for control in [identity, actions] {
+            XCTAssertTrue(control.waitForExistence(timeout: 5))
+            let geometry = XCTAttachment(string: "window=\(app.windows.firstMatch.frame) control=\(control.frame)")
+            geometry.lifetime = .keepAlways
+            add(geometry)
+            XCTAssertTrue(control.isHittable)
+            XCTAssertTrue(app.windows.firstMatch.frame.contains(control.frame))
+        }
+        self.capture("chat-toolbar-current-window", in: app)
+        try self.assertToolbarPainted([identity, actions], in: app.windows.firstMatch)
+        if abs(identity.frame.midY - actions.frame.midY) > 44 {
+            identity.tap()
+            let status = app.descendants(matching: .any)["chat-gateway-status-details"].firstMatch
+            XCTAssertTrue(status.waitForExistence(timeout: 5), "Side-toolbar status needs visible feedback")
+            input.tap()
+            XCTAssertTrue(status.waitForNonExistence(timeout: 5))
+        }
+        actions.tap()
+        let gatewaySettings = app.buttons["chat-gateway-settings"].firstMatch
+        XCTAssertTrue(gatewaySettings.waitForExistence(timeout: 5))
+        let menu = app.descendants(matching: .any)["chat-actions-popover"].firstMatch
+        for _ in 0..<3 where !gatewaySettings.isHittable {
+            menu.swipeUp()
+        }
+        XCTAssertTrue(gatewaySettings.isHittable)
+        gatewaySettings.tap()
+        let readiness = app.descendants(matching: .any)["RootTabs.Ready"].firstMatch
+        self.expectation(for: NSPredicate(format: "value == %@", "ready:gateway"), evaluatedWith: readiness)
+        self.waitForExpectations(timeout: 10)
+    }
+
+    /// AX hit testing remains true when an ancestor mask clips native bar pixels.
+    /// Use the light fixture to distinguish painted glyphs from the empty side strip.
+    private func assertToolbarPainted(_ controls: [XCUIElement], in window: XCUIElement) throws {
+        let bounds = CGRect(origin: .zero, size: window.frame.size)
+        let format = UIGraphicsImageRendererFormat()
+        format.scale = 1
+        format.preferredRange = .standard
+        let screenshot = window.screenshot().image
+        let rendered = UIGraphicsImageRenderer(bounds: bounds, format: format).image { _ in
+            screenshot.draw(in: bounds)
+        }
+        let image = try XCTUnwrap(rendered.cgImage)
+        XCTAssertEqual(image.bitsPerPixel, 32)
+        let data = try XCTUnwrap(image.dataProvider?.data)
+        let pixels = try XCTUnwrap(CFDataGetBytePtr(data))
+        for control in controls {
+            let frame = control.frame.offsetBy(dx: -window.frame.minX, dy: -window.frame.minY)
+                .intersection(bounds).integral
+            var paintedPixels = 0
+            for y in Int(frame.minY)..<Int(frame.maxY) {
+                for x in Int(frame.minX)..<Int(frame.maxX) {
+                    let offset = y * image.bytesPerRow + x * 4
+                    if min(pixels[offset], pixels[offset + 1], pixels[offset + 2]) < 180 {
+                        paintedPixels += 1
+                    }
+                }
+            }
+            XCTAssertGreaterThan(
+                paintedPixels,
+                20,
+                "Toolbar control is tappable but visually clipped: \(control.label)")
+        }
+    }
+
     func testOfflineChatAdaptsAcrossRotationAndRemembersHiddenSidebar() throws {
         continueAfterFailure = false
         XCUIDevice.shared.orientation = .portrait

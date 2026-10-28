@@ -2156,7 +2156,7 @@ extension OpenClawSnapshotUITests {
     }
 
     private func agentIdentity(in app: XCUIApplication) -> XCUIElement {
-        app.otherElements.matching(identifier: "chat-agent-identity").firstMatch
+        app.buttons.matching(identifier: "chat-agent-identity").firstMatch
     }
 
     private func readinessMarker(in app: XCUIApplication) -> XCUIElement {
