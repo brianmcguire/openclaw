@@ -642,7 +642,7 @@ final class TalkModeManager {
         guard self.isCurrentStartAttempt(attemptID) else { return }
 
         do {
-            try configureOwnedAudioSession()
+            try configureOwnedAudioSession(reuseActiveSession: true)
             // Set this before starting recognition so any early speech errors are classified correctly.
             self.captureMode = .continuous
             try self.startRecognition()
@@ -680,9 +680,9 @@ final class TalkModeManager {
             GatewayDiagnostics.log("talk start ignored: app backgrounded")
             return false
         }
-        // Realtime callbacks own Listening/Thinking/Speaking while their session
-        // exists. An idempotent enable must not replace that owner or its phase.
-        guard !self.hasRealtimeOwnerOrStart else { return false }
+        // An existing continuous turn or realtime session owns its phase and audio.
+        // A repeated enable or foreground resume must not start a competing capture.
+        guard !self.hasRealtimeOwnerOrStart, !self.hasContinuousTalkOwner else { return false }
         guard !self.isListening else { return false }
         guard !self.isStarting else {
             GatewayDiagnostics.log("talk start ignored: already starting")
@@ -1477,7 +1477,7 @@ final class TalkModeManager {
         try? await Task.sleep(nanoseconds: 250_000_000)
         guard self.canRestartNativeRecognition(expectedGeneration: expectedGeneration) else { return }
         do {
-            try configureOwnedAudioSession()
+            try configureOwnedAudioSession(reuseActiveSession: true)
             try self.startRecognition()
             self.isListening = true
             self.setStatus(String(localized: "Listening"), phase: .listening)
@@ -3943,7 +3943,20 @@ extension TalkModeManager {
         return lower.contains("missing scope") && lower.contains(scope.lowercased())
     }
 
-    private func configureOwnedAudioSession() throws {
+    private func configureOwnedAudioSession(reuseActiveSession: Bool = false) throws {
+        let session = AVAudioSession.sharedInstance()
+        // Preserved background Talk has native audio already admitted. Reactivating
+        // it between turns can fail while locked and tear down the listening loop.
+        // Foreground recovery, realtime fallback, PTT and route changes still configure.
+        if reuseActiveSession,
+           !self.foregroundPushToTalkAllowed,
+           self.audioSessionIsActive,
+           !self.runtimeRoute.usesRealtime,
+           session.category == .playAndRecord,
+           session.mode == .spokenAudio
+        {
+            return
+        }
         try Self.configureAudioSession(preferredInputDeviceID: self.preferredInputDeviceID)
         self.audioSessionIsActive = true
     }
