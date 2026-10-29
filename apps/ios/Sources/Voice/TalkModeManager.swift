@@ -680,9 +680,11 @@ final class TalkModeManager {
             GatewayDiagnostics.log("talk start ignored: app backgrounded")
             return false
         }
-        // An existing continuous turn or realtime session owns its phase and audio.
-        // A repeated enable or foreground resume must not start a competing capture.
-        guard !self.hasRealtimeOwnerOrStart, !self.hasContinuousTalkOwner else { return false }
+        // Live realtime transports and native transcript work own their phase and audio.
+        // Retained continuous mode alone must allow an ended realtime transport to restart.
+        guard !self.hasRealtimeOwnerOrStart,
+              self.continuousTranscriptProcessingGeneration != self.transcriptProcessingGeneration
+        else { return false }
         guard !self.isListening else { return false }
         guard !self.isStarting else {
             GatewayDiagnostics.log("talk start ignored: already starting")
